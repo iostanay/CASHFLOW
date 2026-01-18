@@ -119,25 +119,33 @@ async def create_bank_loan_receipt(
     receipt_mode: str = Form(default="Bank Transfer"),
     remarks: Optional[str] = Form(None),
     attachment: Optional[UploadFile] = File(None),
+    attachment_path: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     """
-    Create a new bank loan receipt with optional file attachment
+    Create a new bank loan receipt with optional file attachment or attachment URL/path
+    
+    You can either:
+    1. Upload a file using 'attachment' (will be uploaded to Firebase)
+    2. Provide a URL/path directly using 'attachment_path' (stored as-is)
     """
     try:
-        attachment_path = None
+        final_attachment_path = None
         
-        # Upload file to Firebase if provided
-        if attachment:
+        # If file is uploaded, upload to Firebase
+        if attachment and attachment.filename:
             file_content = await attachment.read()
             file_url = upload_file_to_firebase(file_content, attachment.filename)
             if file_url:
-                attachment_path = file_url
+                final_attachment_path = file_url
             else:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Failed to upload attachment to Firebase"
                 )
+        # If attachment_path (URL) is provided directly, use it
+        elif attachment_path:
+            final_attachment_path = attachment_path
         
         # Create receipt data
         receipt_data = {
@@ -149,7 +157,7 @@ async def create_bank_loan_receipt(
             "amount": amount,
             "receipt_mode": receipt_mode,
             "remarks": remarks,
-            "attachment_path": attachment_path
+            "attachment_path": final_attachment_path
         }
         
         db_receipt = BankLoanReceipt(**receipt_data)
