@@ -118,7 +118,7 @@ async def create_bank_loan_receipt(
     amount: float = Form(...),
     receipt_mode: str = Form(default="Bank Transfer"),
     remarks: Optional[str] = Form(None),
-    attachment: Optional[UploadFile] = File(None),
+    # attachment: Optional[UploadFile] = File(None),
     attachment_path: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
