@@ -38,6 +38,7 @@ def create_receipt(receipt: CustomerReceiptCreate, db: Session = Depends(get_db)
     Create a new customer receipt
     """
     try:
+        # Pydantic's use_enum_values=True converts enum to its value (string)
         db_receipt = CustomerReceipt(**receipt.dict())
         db.add(db_receipt)
         db.commit()

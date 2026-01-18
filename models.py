@@ -22,7 +22,7 @@ class CustomerReceipt(Base):
     receipt_purpose = Column(String(100), default="Receipt from Customer")
     
     receipt_date = Column(Date, nullable=False)
-    receipt_type = Column(Enum(ReceiptType), nullable=False)
+    receipt_type = Column(String(50), default="Cash Inflow")
     
     amount = Column(DECIMAL(12, 2), nullable=False)
     
