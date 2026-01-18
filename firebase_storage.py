@@ -1,9 +1,16 @@
-import firebase_admin
-from firebase_admin import credentials, storage
 import os
 from typing import Optional
 import uuid
 from datetime import datetime
+
+# Optional Firebase imports - handle gracefully if not installed
+try:
+    import firebase_admin
+    from firebase_admin import credentials, storage
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    FIREBASE_AVAILABLE = False
+    print("Warning: firebase-admin not installed. File uploads will be disabled.")
 
 # Initialize Firebase Admin SDK
 FIREBASE_CREDENTIALS_PATH = os.getenv(
@@ -12,14 +19,25 @@ FIREBASE_CREDENTIALS_PATH = os.getenv(
 )
 
 # Initialize Firebase Admin (only if not already initialized)
-if not firebase_admin._apps:
-    if os.path.exists(FIREBASE_CREDENTIALS_PATH):
-        cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
-        firebase_admin.initialize_app(cred, {
-            'storageBucket': 'cashflow-9b16c.appspot.com'
-        })
-    else:
-        raise FileNotFoundError(f"Firebase credentials file not found at: {FIREBASE_CREDENTIALS_PATH}")
+# Make initialization optional - don't fail if credentials are missing
+_firebase_initialized = False
+if FIREBASE_AVAILABLE:
+    try:
+        if not firebase_admin._apps:
+            if os.path.exists(FIREBASE_CREDENTIALS_PATH):
+                cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
+                firebase_admin.initialize_app(cred, {
+                    'storageBucket': 'cashflow-9b16c.appspot.com'
+                })
+                _firebase_initialized = True
+            else:
+                print(f"Warning: Firebase credentials file not found at: {FIREBASE_CREDENTIALS_PATH}. File uploads will be disabled.")
+                _firebase_initialized = False
+        else:
+            _firebase_initialized = True
+    except Exception as e:
+        print(f"Warning: Firebase initialization failed: {str(e)}. File uploads will be disabled.")
+        _firebase_initialized = False
 
 
 def upload_file_to_firebase(file_content: bytes, file_name: str, folder: str = "bank_loan_receipts") -> Optional[str]:
@@ -34,6 +52,9 @@ def upload_file_to_firebase(file_content: bytes, file_name: str, folder: str = "
     Returns:
         Public URL of the uploaded file or None if upload fails
     """
+    if not _firebase_initialized:
+        print("Warning: Firebase not initialized. Cannot upload file.")
+        return None
     try:
         # Generate unique filename with timestamp and UUID
         file_extension = os.path.splitext(file_name)[1]
@@ -69,6 +90,9 @@ def delete_file_from_firebase(file_url: str) -> bool:
     Returns:
         True if deletion successful, False otherwise
     """
+    if not _firebase_initialized:
+        print("Warning: Firebase not initialized. Cannot delete file.")
+        return False
     try:
         # Extract blob name from URL
         bucket = storage.bucket()
