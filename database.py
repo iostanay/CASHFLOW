@@ -7,7 +7,7 @@ import os
 # Use environment variable if available (for Railway/deployment), otherwise use default
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "mysql+pymysql://root:WEQSDeQDqrVjuLifMAysXbrcHwlpcEgV@maglev.proxy.rlwy.net:19323/cashflow_db"
+    "mysql://root:tHRyYsZtIGfadoAWvhQPExvQAJllwmUL@switchyard.proxy.rlwy.net:20581/railway"
 )
 
 # Ensure the DATABASE_URL has the correct format for SQLAlchemy
