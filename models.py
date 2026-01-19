@@ -21,6 +21,33 @@ class ReceiptMode(str, enum.Enum):
     IMPS = "IMPS"
 
 
+class PaymentPurpose(str, enum.Enum):
+    PURCHASE_MATERIAL = "Purchase of Material"
+    PURCHASE_ASSETS = "Purchase of Assets"
+    SERVICE_ADVISEMENT = "Service Advisement"
+    MAINTENANCE = "Maintenance"
+    OTHER = "Other"
+
+
+class PaymentType(str, enum.Enum):
+    CASH = "Cash"
+    CHEQUE = "Cheque"
+    BANK_TRANSFER = "Bank Transfer"
+    UPI = "UPI"
+    NEFT = "NEFT"
+    RTGS = "RTGS"
+    IMPS = "IMPS"
+
+
+class EmployeePaymentPurpose(str, enum.Enum):
+    SALARY_PAYMENT = "Salary Payment"
+    EXPENSES_REIMBURSEMENT = "Expenses Reimbursement"
+    INCENTIVE_PAYMENT = "Incentive Payment"
+    COMMISSION_PAYMENT = "Commission Payment"
+    BONUS = "Bonus"
+    OTHER = "Other"
+
+
 class CustomerReceipt(Base):
     __tablename__ = "customer_receipts"
 
@@ -60,6 +87,58 @@ class BankLoanReceipt(Base):
     amount = Column(DECIMAL(14, 2), nullable=False)
     
     receipt_mode = Column(Enum(ReceiptMode, native_enum=False, length=50), default="Bank Transfer")
+    
+    remarks = Column(Text, nullable=True)
+    
+    attachment_path = Column(String(255), nullable=True)
+    
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class VendorPayment(Base):
+    __tablename__ = "vendor_payments"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    
+    vendor_name = Column(String(150), nullable=False)
+    payment_nature = Column(String(50), default="Cash Outflow")
+    payment_purpose = Column(Enum(PaymentPurpose, native_enum=False, length=100), nullable=False)
+    
+    service_or_material_details = Column(String(255), nullable=True)
+    
+    payment_date = Column(Date, nullable=False)
+    payment_type = Column(Enum(PaymentType, native_enum=False, length=50), nullable=False)
+    
+    amount = Column(DECIMAL(14, 2), nullable=False)
+    
+    bank_name = Column(String(150), nullable=True)
+    
+    remarks = Column(Text, nullable=True)
+    
+    attachment_path = Column(String(255), nullable=True)
+    
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class EmployeePayment(Base):
+    __tablename__ = "employee_payments"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    
+    employee_name = Column(String(150), nullable=False)
+    employee_id = Column(String(50), nullable=True)
+    
+    payment_nature = Column(String(50), default="Cash Outflow")
+    payment_purpose = Column(Enum(EmployeePaymentPurpose, native_enum=False, length=100), nullable=False)
+    
+    payment_date = Column(Date, nullable=False)
+    payment_type = Column(Enum(PaymentType, native_enum=False, length=50), nullable=False)
+    
+    amount = Column(DECIMAL(14, 2), nullable=False)
+    
+    bank_name = Column(String(150), nullable=True)
     
     remarks = Column(Text, nullable=True)
     

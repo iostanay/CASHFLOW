@@ -5,8 +5,8 @@ from typing import List, Optional
 from datetime import date
 
 from database import get_db, engine
-from models import Base, CustomerReceipt, BankLoanReceipt
-from schemas import CustomerReceiptCreate, CustomerReceiptResponse, BankLoanReceiptCreate, BankLoanReceiptResponse
+from models import Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment
+from schemas import CustomerReceiptCreate, CustomerReceiptResponse, BankLoanReceiptCreate, BankLoanReceiptResponse, VendorPaymentCreate, VendorPaymentResponse, EmployeePaymentCreate, EmployeePaymentResponse
 from firebase_storage import upload_file_to_firebase
 
 # Create database tables
@@ -231,6 +231,166 @@ def get_bank_loan_receipt(receipt_id: int, db: Session = Depends(get_db)):
             detail=f"Bank loan receipt with id {receipt_id} not found"
         )
     return receipt
+
+
+# Vendor Payments Endpoints
+
+@app.post("/api/vendor-payments", response_model=VendorPaymentResponse, status_code=status.HTTP_201_CREATED)
+def create_vendor_payment(payment: VendorPaymentCreate, db: Session = Depends(get_db)):
+    """
+    Create a new vendor payment
+    """
+    try:
+        db_payment = VendorPayment(**payment.dict())
+        db.add(db_payment)
+        db.commit()
+        db.refresh(db_payment)
+        return db_payment
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error creating vendor payment: {str(e)}"
+        )
+
+
+@app.get("/api/vendor-payments", response_model=List[VendorPaymentResponse])
+def list_vendor_payments(
+    skip: int = 0,
+    limit: int = 100,
+    vendor_name: Optional[str] = None,
+    payment_purpose: Optional[str] = None,
+    payment_type: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    List all vendor payments with optional filtering
+    """
+    try:
+        query = db.query(VendorPayment)
+        
+        # Apply filters
+        if vendor_name:
+            query = query.filter(VendorPayment.vendor_name.like(f"%{vendor_name}%"))
+        
+        if payment_purpose:
+            query = query.filter(VendorPayment.payment_purpose == payment_purpose)
+        
+        if payment_type:
+            query = query.filter(VendorPayment.payment_type == payment_type)
+        
+        if start_date:
+            query = query.filter(VendorPayment.payment_date >= start_date)
+        
+        if end_date:
+            query = query.filter(VendorPayment.payment_date <= end_date)
+        
+        # Order by payment_date descending (newest first)
+        payments = query.order_by(VendorPayment.payment_date.desc()).offset(skip).limit(limit).all()
+        return payments
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching vendor payments: {str(e)}"
+        )
+
+
+@app.get("/api/vendor-payments/{payment_id}", response_model=VendorPaymentResponse)
+def get_vendor_payment(payment_id: int, db: Session = Depends(get_db)):
+    """
+    Get a specific vendor payment by ID
+    """
+    payment = db.query(VendorPayment).filter(VendorPayment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Vendor payment with id {payment_id} not found"
+        )
+    return payment
+
+
+# Employee Payments Endpoints
+
+@app.post("/api/employee-payments", response_model=EmployeePaymentResponse, status_code=status.HTTP_201_CREATED)
+def create_employee_payment(payment: EmployeePaymentCreate, db: Session = Depends(get_db)):
+    """
+    Create a new employee payment
+    """
+    try:
+        db_payment = EmployeePayment(**payment.dict())
+        db.add(db_payment)
+        db.commit()
+        db.refresh(db_payment)
+        return db_payment
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error creating employee payment: {str(e)}"
+        )
+
+
+@app.get("/api/employee-payments", response_model=List[EmployeePaymentResponse])
+def list_employee_payments(
+    skip: int = 0,
+    limit: int = 100,
+    employee_name: Optional[str] = None,
+    employee_id: Optional[str] = None,
+    payment_purpose: Optional[str] = None,
+    payment_type: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    List all employee payments with optional filtering
+    """
+    try:
+        query = db.query(EmployeePayment)
+        
+        # Apply filters
+        if employee_name:
+            query = query.filter(EmployeePayment.employee_name.like(f"%{employee_name}%"))
+        
+        if employee_id:
+            query = query.filter(EmployeePayment.employee_id.like(f"%{employee_id}%"))
+        
+        if payment_purpose:
+            query = query.filter(EmployeePayment.payment_purpose == payment_purpose)
+        
+        if payment_type:
+            query = query.filter(EmployeePayment.payment_type == payment_type)
+        
+        if start_date:
+            query = query.filter(EmployeePayment.payment_date >= start_date)
+        
+        if end_date:
+            query = query.filter(EmployeePayment.payment_date <= end_date)
+        
+        # Order by payment_date descending (newest first)
+        payments = query.order_by(EmployeePayment.payment_date.desc()).offset(skip).limit(limit).all()
+        return payments
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching employee payments: {str(e)}"
+        )
+
+
+@app.get("/api/employee-payments/{payment_id}", response_model=EmployeePaymentResponse)
+def get_employee_payment(payment_id: int, db: Session = Depends(get_db)):
+    """
+    Get a specific employee payment by ID
+    """
+    payment = db.query(EmployeePayment).filter(EmployeePayment.id == payment_id).first()
+    if not payment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Employee payment with id {payment_id} not found"
+        )
+    return payment
 
 
 if __name__ == "__main__":
