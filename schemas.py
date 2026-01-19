@@ -74,7 +74,7 @@ class BankLoanReceiptResponse(BaseModel):
 class VendorPaymentCreate(BaseModel):
     vendor_name: str = Field(..., max_length=150, description="Name of the vendor")
     payment_nature: Optional[str] = Field(default="Cash Outflow", max_length=50)
-    payment_purpose: PaymentPurpose = Field(..., description="Purpose of payment")
+    payment_purpose: PaymentPurpose = Field(..., description="Purpose of payment-tanay")
     service_or_material_details: Optional[str] = Field(None, max_length=255)
     payment_date: date = Field(..., description="Date of the payment")
     payment_type: PaymentType = Field(..., description="Type of payment")
