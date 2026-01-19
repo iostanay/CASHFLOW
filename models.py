@@ -103,8 +103,8 @@ class VendorPayment(Base):
     
     vendor_name = Column(String(150), nullable=False)
     payment_nature = Column(String(50), default="Cash Outflow")
-    payment_purpose = Column(Enum(PaymentPurpose, native_enum=False, length=100), nullable=False)
-    
+    # payment_purpose = Column(Enum(PaymentPurpose, native_enum=False, length=100), nullable=False)
+     payment_purpose = Column(String(150), nullable=False)
     service_or_material_details = Column(String(255), nullable=True)
     
     payment_date = Column(Date, nullable=False)
