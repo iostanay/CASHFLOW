@@ -25,7 +25,7 @@ class PaymentPurpose(str, enum.Enum):
     PURCHASE_MATERIAL = "Purchase of Material"
     PURCHASE_ASSETS = "Purchase of Assets"
     SERVICE_ADVISEMENT = "Service Advisement"
-    MAINTENANCE = "Maintenance"
+    MAINTENANCE = "MAINTENANCE"
     OTHER = "Other"
 
 
