@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, String, Date, Enum, DECIMAL, Text, TIMESTAMP
+from sqlalchemy import Column, BigInteger, Integer, String, Date, Enum, DECIMAL, Text, TIMESTAMP
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -72,6 +72,13 @@ class CustomerReceipt(Base):
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 
+class InflowReceiptMaster(Base):
+    __tablename__ = "inflow_receipt_master"
+
+    entity_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(150), nullable=False, unique=True)
+
+
 class BankLoanReceipt(Base):
     __tablename__ = "bank_loan_receipts"
 
@@ -86,8 +93,9 @@ class BankLoanReceipt(Base):
     receipt_date = Column(Date, nullable=False)
     amount = Column(DECIMAL(14, 2), nullable=False)
     
-    receipt_mode = Column(Enum(ReceiptMode, native_enum=False, length=50), default="Bank Transfer")
-    
+    # receipt_mode = Column(Enum(ReceiptMode, native_enum=False, length=50), default="Bank Transfer")
+    receipt_mode = Column(String(150), nullable=False)
+
     remarks = Column(Text, nullable=True)
     
     attachment_path = Column(String(255), nullable=True)

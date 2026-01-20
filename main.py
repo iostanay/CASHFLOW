@@ -5,8 +5,8 @@ from typing import List, Optional
 from datetime import date
 
 from database import get_db, engine
-from models import Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment
-from schemas import CustomerReceiptCreate, CustomerReceiptResponse, BankLoanReceiptCreate, BankLoanReceiptResponse, VendorPaymentCreate, VendorPaymentResponse, EmployeePaymentCreate, EmployeePaymentResponse
+from models import Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment, InflowReceiptMaster
+from schemas import CustomerReceiptCreate, CustomerReceiptResponse, BankLoanReceiptCreate, BankLoanReceiptResponse, VendorPaymentCreate, VendorPaymentResponse, EmployeePaymentCreate, EmployeePaymentResponse, InflowReceiptMasterResponse
 from firebase_storage import upload_file_to_firebase
 
 # Create database tables
@@ -391,6 +391,49 @@ def get_employee_payment(payment_id: int, db: Session = Depends(get_db)):
             detail=f"Employee payment with id {payment_id} not found"
         )
     return payment
+
+
+# Inflow Receipt Master Endpoints
+
+@app.get("/api/inflow-receipt-master", response_model=List[InflowReceiptMasterResponse])
+def list_inflow_receipt_master(
+    skip: int = 0,
+    limit: int = 100,
+    name: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    List all inflow receipt master records with optional filtering
+    """
+    try:
+        query = db.query(InflowReceiptMaster)
+        
+        # Apply filters
+        if name:
+            query = query.filter(InflowReceiptMaster.name.like(f"%{name}%"))
+        
+        # Order by name ascending
+        records = query.order_by(InflowReceiptMaster.name.asc()).offset(skip).limit(limit).all()
+        return records
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching inflow receipt master: {str(e)}"
+        )
+
+
+@app.get("/api/inflow-receipt-master/{entity_id}", response_model=InflowReceiptMasterResponse)
+def get_inflow_receipt_master(entity_id: int, db: Session = Depends(get_db)):
+    """
+    Get a specific inflow receipt master record by ID
+    """
+    record = db.query(InflowReceiptMaster).filter(InflowReceiptMaster.entity_id == entity_id).first()
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow receipt master with id {entity_id} not found"
+        )
+    return record
 
 
 if __name__ == "__main__":
