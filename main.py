@@ -12,7 +12,7 @@ from schemas import (
     VendorPaymentCreate, VendorPaymentResponse, 
     EmployeePaymentCreate, EmployeePaymentResponse, 
     InflowReceiptMasterResponse,
-    CompanyCreate, CompanyResponse,
+    CompanyCreate, CompanyResponse, CompanyUpdate,
     CompanyBankAccountCreate, CompanyBankAccountResponse,
     CompanyWithBankAccounts, CompanyCreateResponse
 )
@@ -602,6 +602,71 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching company: {str(e)}"
+        )
+
+
+@app.put("/api/companies/{company_id}", response_model=CompanyResponse)
+def update_company(company_id: int, company_update: CompanyUpdate, db: Session = Depends(get_db)):
+    """
+    Update a company by ID
+    """
+    try:
+        # Get company
+        company = db.query(Company).filter(Company.id == company_id).first()
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with id {company_id} not found"
+            )
+        
+        # Update company fields
+        company.company_name = company_update.company_name
+        
+        db.commit()
+        db.refresh(company)
+        
+        return company
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error updating company: {str(e)}"
+        )
+
+
+@app.delete("/api/companies/{company_id}")
+def delete_company(company_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a company by ID (cascades to delete all associated bank accounts)
+    """
+    try:
+        # Get company
+        company = db.query(Company).filter(Company.id == company_id).first()
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with id {company_id} not found"
+            )
+        
+        # Delete company (bank accounts will be deleted automatically due to CASCADE)
+        db.delete(company)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Company with id {company_id} deleted successfully"
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error deleting company: {str(e)}"
         )
 
 

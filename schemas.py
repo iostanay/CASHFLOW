@@ -179,6 +179,13 @@ class CompanyCreate(BaseModel):
         from_attributes = True
 
 
+class CompanyUpdate(BaseModel):
+    company_name: str = Field(..., max_length=200, description="Name of the company")
+
+    class Config:
+        from_attributes = True
+
+
 class CompanyResponse(BaseModel):
     id: int
     company_name: str
