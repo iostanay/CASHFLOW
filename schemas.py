@@ -179,8 +179,16 @@ class CompanyCreate(BaseModel):
         from_attributes = True
 
 
+class CompanyBankAccountUpdate(BaseModel):
+    """Bank account update schema - id is optional (if provided, updates existing; if not, creates new)"""
+    id: Optional[int] = Field(None, description="Bank account ID (optional - if provided, updates existing account)")
+    bank_name: str = Field(..., max_length=150, description="Name of the bank")
+    account_number: str = Field(..., max_length=50, description="Bank account number")
+
+
 class CompanyUpdate(BaseModel):
     company_name: str = Field(..., max_length=200, description="Name of the company")
+    bank_accounts: Optional[List[CompanyBankAccountUpdate]] = Field(default=[], description="List of bank accounts (replace all existing with this list)")
 
     class Config:
         from_attributes = True

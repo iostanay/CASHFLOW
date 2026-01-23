@@ -605,10 +605,11 @@ def get_company(company_id: int, db: Session = Depends(get_db)):
         )
 
 
-@app.put("/api/companies/{company_id}", response_model=CompanyResponse)
+@app.put("/api/companies/{company_id}", response_model=CompanyCreateResponse)
 def update_company(company_id: int, company_update: CompanyUpdate, db: Session = Depends(get_db)):
     """
-    Update a company by ID
+    Update a company by ID - updates company name and bank accounts
+    Bank accounts are replaced with the provided list
     """
     try:
         # Get company
@@ -619,13 +620,71 @@ def update_company(company_id: int, company_update: CompanyUpdate, db: Session =
                 detail=f"Company with id {company_id} not found"
             )
         
-        # Update company fields
+        # Update company name
         company.company_name = company_update.company_name
+        
+        # Get existing bank accounts
+        existing_bank_accounts = db.query(CompanyBankAccount).filter(
+            CompanyBankAccount.company_id == company_id
+        ).all()
+        
+        # Get IDs of bank accounts to keep (those with id in the update request)
+        bank_account_ids_to_keep = {
+            ba.id for ba in company_update.bank_accounts or [] if ba.id is not None
+        }
+        
+        # Delete bank accounts that are not in the update list
+        for existing_ba in existing_bank_accounts:
+            if existing_ba.id not in bank_account_ids_to_keep:
+                db.delete(existing_ba)
+        
+        # Update or create bank accounts
+        updated_bank_accounts = []
+        for bank_account_data in company_update.bank_accounts or []:
+            ba_data = bank_account_data.dict()
+            ba_id = ba_data.pop("id", None)
+            
+            if ba_id:
+                # Update existing bank account
+                existing_ba = db.query(CompanyBankAccount).filter(
+                    CompanyBankAccount.id == ba_id,
+                    CompanyBankAccount.company_id == company_id
+                ).first()
+                if existing_ba:
+                    existing_ba.bank_name = ba_data["bank_name"]
+                    existing_ba.account_number = ba_data["account_number"]
+                    updated_bank_accounts.append(existing_ba)
+            else:
+                # Create new bank account
+                ba_data["company_id"] = company_id
+                new_ba = CompanyBankAccount(**ba_data)
+                db.add(new_ba)
+                updated_bank_accounts.append(new_ba)
+        
+        db.flush()
+        
+        # Refresh all bank accounts to get their IDs
+        for ba in updated_bank_accounts:
+            db.refresh(ba)
         
         db.commit()
         db.refresh(company)
         
-        return company
+        # Format response
+        return {
+            "company": {
+                "id": company.id,
+                "company_name": company.company_name,
+                "created_at": company.created_at
+            },
+            "bank_accounts": [
+                {
+                    "bank_name": ba.bank_name,
+                    "account_number": ba.account_number
+                }
+                for ba in updated_bank_accounts
+            ]
+        }
     except HTTPException:
         db.rollback()
         raise
