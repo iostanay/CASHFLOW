@@ -150,12 +150,22 @@ class InflowReceiptMasterResponse(BaseModel):
 
 
 # Company Schemas
-class CompanyBankAccountCreate(BaseModel):
+class CompanyBankAccountCreateSimple(BaseModel):
+    """Simplified bank account schema for request (only bank_name and account_number)"""
     bank_name: str = Field(..., max_length=150, description="Name of the bank")
     account_number: str = Field(..., max_length=50, description="Bank account number")
-    account_holder_name: Optional[str] = Field(None, max_length=200, description="Account holder name")
-    ifsc_code: Optional[str] = Field(None, max_length=20, description="IFSC code")
-    branch_name: Optional[str] = Field(None, max_length=150, description="Branch name")
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyBankAccountCreate(BaseModel):
+    """Full bank account schema with all fields"""
+    bank_name: str = Field(..., max_length=150, description="Name of the bank")
+    account_number: str = Field(..., max_length=50, description="Bank account number")
+    # account_holder_name: Optional[str] = Field(None, max_length=200, description="Account holder name")
+    # ifsc_code: Optional[str] = Field(None, max_length=20, description="IFSC code")
+    # branch_name: Optional[str] = Field(None, max_length=150, description="Branch name")
 
     class Config:
         from_attributes = True
@@ -163,7 +173,7 @@ class CompanyBankAccountCreate(BaseModel):
 
 class CompanyCreate(BaseModel):
     company_name: str = Field(..., max_length=200, description="Name of the company")
-    bank_accounts: Optional[List[CompanyBankAccountCreate]] = Field(default=[], description="List of bank accounts for the company")
+    bank_accounts: Optional[List[CompanyBankAccountCreateSimple]] = Field(default=[], description="List of bank accounts for the company (only bank_name and account_number required)")
 
     class Config:
         from_attributes = True
@@ -193,6 +203,24 @@ class CompanyBankAccountResponse(BaseModel):
 class CompanyWithBankAccounts(BaseModel):
     company: CompanyResponse
     bank_accounts: List[CompanyBankAccountResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyBankAccountSimpleResponse(BaseModel):
+    """Simplified bank account response with only bank_name and account_number"""
+    bank_name: str
+    account_number: str
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyCreateResponse(BaseModel):
+    """Response model for company creation"""
+    company: CompanyResponse
+    bank_accounts: List[CompanyBankAccountSimpleResponse]
 
     class Config:
         from_attributes = True

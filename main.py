@@ -14,7 +14,7 @@ from schemas import (
     InflowReceiptMasterResponse,
     CompanyCreate, CompanyResponse,
     CompanyBankAccountCreate, CompanyBankAccountResponse,
-    CompanyWithBankAccounts
+    CompanyWithBankAccounts, CompanyCreateResponse
 )
 from firebase_storage import upload_file_to_firebase
 
@@ -447,10 +447,12 @@ def get_inflow_receipt_master(entity_id: int, db: Session = Depends(get_db)):
 
 # Company Endpoints
 
-@app.post("/api/companies", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/companies", response_model=CompanyCreateResponse, status_code=status.HTTP_201_CREATED)
 def create_company(company: CompanyCreate, db: Session = Depends(get_db)):
     """
-    Create a new company with bank accounts in a single API call
+    Create a new company with bank accounts in a single API call.
+    Request body accepts bank_accounts with only bank_name and account_number.
+    Response returns company with all bank account details.
     """
     try:
         company_data = company.dict()
@@ -462,15 +464,36 @@ def create_company(company: CompanyCreate, db: Session = Depends(get_db)):
         db.flush()  # Flush to get the company ID without committing
         
         # Create bank accounts if provided
+        created_bank_accounts = []
         if bank_accounts_data:
             for bank_account_data in bank_accounts_data:
                 bank_account_data["company_id"] = db_company.id
                 db_bank_account = CompanyBankAccount(**bank_account_data)
                 db.add(db_bank_account)
+                created_bank_accounts.append(db_bank_account)
         
         db.commit()
         db.refresh(db_company)
-        return db_company
+        
+        # Refresh bank accounts to get their IDs
+        for ba in created_bank_accounts:
+            db.refresh(ba)
+        
+        # Format response
+        return {
+            "company": {
+                "id": db_company.id,
+                "company_name": db_company.company_name,
+                "created_at": db_company.created_at
+            },
+            "bank_accounts": [
+                {
+                    "bank_name": ba.bank_name,
+                    "account_number": ba.account_number
+                }
+                for ba in created_bank_accounts
+            ]
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -499,10 +522,10 @@ def list_companies(db: Session = Depends(get_db)):
                 {
                     "id": ba.id,
                     "bank_name": ba.bank_name,
-                    "account_holder_name": ba.account_holder_name,
+                    # "account_holder_name": ba.account_holder_name,
                     "account_number": ba.account_number,
-                    "ifsc_code": ba.ifsc_code,
-                    "branch_name": ba.branch_name
+                    # "ifsc_code": ba.ifsc_code,
+                    # "branch_name": ba.branch_name
                 }
                 for ba in bank_accounts
             ]

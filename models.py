@@ -176,9 +176,9 @@ class CompanyBankAccount(Base):
     
     bank_name = Column(String(150), nullable=False)
     account_number = Column(String(50), nullable=False)
-    account_holder_name = Column(String(200), nullable=True)
-    ifsc_code = Column(String(20), nullable=True)
-    branch_name = Column(String(150), nullable=True)
+    # account_holder_name = Column(String(200), nullable=True)
+    # ifsc_code = Column(String(20), nullable=True)
+    # branch_name = Column(String(150), nullable=True)
     
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     
