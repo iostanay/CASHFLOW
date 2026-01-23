@@ -49,28 +49,28 @@ class EmployeePaymentPurpose(str, enum.Enum):
     OTHER = "Other"
 
 
-# class CustomerReceipt(Base):
-#     __tablename__ = "customer_receipts"
+class CustomerReceipt(Base):
+    __tablename__ = "customer_receipts"
 
-#     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     
-#     customer_name = Column(String(150), nullable=False)
-#     receipt_nature = Column(String(50), default="Cash Inflow")
-#     receipt_purpose = Column(String(100), default="Receipt from Customer")
+    customer_name = Column(String(150), nullable=False)
+    receipt_nature = Column(String(50), default="Cash Inflow")
+    receipt_purpose = Column(String(100), default="Receipt from Customer")
     
-#     receipt_date = Column(Date, nullable=False)
-#     receipt_type = Column(String(50), default="Cash Inflow")
+    receipt_date = Column(Date, nullable=False)
+    receipt_type = Column(String(50), default="Cash Inflow")
     
-#     amount = Column(DECIMAL(12, 2), nullable=False)
+    amount = Column(DECIMAL(12, 2), nullable=False)
     
-#     bank_name = Column(String(150), nullable=True)
-#     project_name = Column(String(150), nullable=True)
-#     company_name = Column(String(150), nullable=True)
+    bank_name = Column(String(150), nullable=True)
+    project_name = Column(String(150), nullable=True)
+    company_name = Column(String(150), nullable=True)
     
-#     remarks = Column(Text, nullable=True)
+    remarks = Column(Text, nullable=True)
     
-#     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-#     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 
 class InflowReceiptMaster(Base):
@@ -80,81 +80,81 @@ class InflowReceiptMaster(Base):
     name = Column(String(150), nullable=False, unique=True)
 
 
-# class BankLoanReceipt(Base):
-#     __tablename__ = "bank_loan_receipts"
+class BankLoanReceipt(Base):
+    __tablename__ = "bank_loan_receipts"
 
-#     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     
-#     bank_name = Column(String(150), nullable=False)
-#     receipt_nature = Column(String(50), default="Cash Inflow")
-#     receipt_purpose = Column(String(100), default="Loan Receipts")
+    bank_name = Column(String(150), nullable=False)
+    receipt_nature = Column(String(50), default="Cash Inflow")
+    receipt_purpose = Column(String(100), default="Loan Receipts")
     
-#     loan_reference_no = Column(String(100), nullable=True)
+    loan_reference_no = Column(String(100), nullable=True)
     
-#     receipt_date = Column(Date, nullable=False)
-#     amount = Column(DECIMAL(14, 2), nullable=False)
+    receipt_date = Column(Date, nullable=False)
+    amount = Column(DECIMAL(14, 2), nullable=False)
     
-#     # receipt_mode = Column(Enum(ReceiptMode, native_enum=False, length=50), default="Bank Transfer")
-#     receipt_mode = Column(String(150), nullable=False)
+    # receipt_mode = Column(Enum(ReceiptMode, native_enum=False, length=50), default="Bank Transfer")
+    receipt_mode = Column(String(150), nullable=False)
 
-#     remarks = Column(Text, nullable=True)
+    remarks = Column(Text, nullable=True)
     
-#     attachment_path = Column(String(255), nullable=True)
+    attachment_path = Column(String(255), nullable=True)
     
-#     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-#     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
-
-
-# class VendorPayment(Base):
-#     __tablename__ = "vendor_payments"
-
-#     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    
-#     vendor_name = Column(String(150), nullable=False)
-#     payment_nature = Column(String(50), default="Cash Outflow")
-#     # payment_purpose = Column(Enum(PaymentPurpose, native_enum=False, length=100), nullable=False)
-#     payment_purpose = Column(String(150), nullable=False)
-#     service_or_material_details = Column(String(255), nullable=True)
-    
-#     payment_date = Column(Date, nullable=False)
-#     payment_type = Column(Enum(PaymentType, native_enum=False, length=50), nullable=False)
-    
-#     amount = Column(DECIMAL(14, 2), nullable=False)
-    
-#     bank_name = Column(String(150), nullable=True)
-    
-#     remarks = Column(Text, nullable=True)
-    
-#     attachment_path = Column(String(255), nullable=True)
-    
-#     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-#     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 
-# class EmployeePayment(Base):
-#     __tablename__ = "employee_payments"
+class VendorPayment(Base):
+    __tablename__ = "vendor_payments"
 
-#     id = Column(BigInteger, primary_key=True, autoincrement=True)
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     
-#     employee_name = Column(String(150), nullable=False)
-#     employee_id = Column(String(50), nullable=True)
+    vendor_name = Column(String(150), nullable=False)
+    payment_nature = Column(String(50), default="Cash Outflow")
+    # payment_purpose = Column(Enum(PaymentPurpose, native_enum=False, length=100), nullable=False)
+    payment_purpose = Column(String(150), nullable=False)
+    service_or_material_details = Column(String(255), nullable=True)
     
-#     payment_nature = Column(String(50), default="Cash Outflow")
-#     payment_purpose = Column(Enum(EmployeePaymentPurpose, native_enum=False, length=100), nullable=False)
+    payment_date = Column(Date, nullable=False)
+    payment_type = Column(Enum(PaymentType, native_enum=False, length=50), nullable=False)
     
-#     payment_date = Column(Date, nullable=False)
-#     payment_type = Column(Enum(PaymentType, native_enum=False, length=50), nullable=False)
+    amount = Column(DECIMAL(14, 2), nullable=False)
     
-#     amount = Column(DECIMAL(14, 2), nullable=False)
+    bank_name = Column(String(150), nullable=True)
     
-#     bank_name = Column(String(150), nullable=True)
+    remarks = Column(Text, nullable=True)
     
-#     remarks = Column(Text, nullable=True)
+    attachment_path = Column(String(255), nullable=True)
     
-#     attachment_path = Column(String(255), nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class EmployeePayment(Base):
+    __tablename__ = "employee_payments"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
     
-#     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
-#     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    employee_name = Column(String(150), nullable=False)
+    employee_id = Column(String(50), nullable=True)
+    
+    payment_nature = Column(String(50), default="Cash Outflow")
+    payment_purpose = Column(Enum(EmployeePaymentPurpose, native_enum=False, length=100), nullable=False)
+    
+    payment_date = Column(Date, nullable=False)
+    payment_type = Column(Enum(PaymentType, native_enum=False, length=50), nullable=False)
+    
+    amount = Column(DECIMAL(14, 2), nullable=False)
+    
+    bank_name = Column(String(150), nullable=True)
+    
+    remarks = Column(Text, nullable=True)
+    
+    attachment_path = Column(String(255), nullable=True)
+    
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 
 class Company(Base):
