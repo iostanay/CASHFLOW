@@ -1,4 +1,5 @@
-from sqlalchemy import Column, BigInteger, Integer, String, Date, Enum, DECIMAL, Text, TIMESTAMP
+from sqlalchemy import Column, BigInteger, Integer, String, Date, Enum, DECIMAL, Text, TIMESTAMP, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -154,3 +155,32 @@ class EmployeePayment(Base):
     
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class Company(Base):
+    __tablename__ = "companies"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    company_name = Column(String(200), nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    
+    # Relationship to bank accounts
+    bank_accounts = relationship("CompanyBankAccount", back_populates="company", cascade="all, delete-orphan")
+
+
+class CompanyBankAccount(Base):
+    __tablename__ = "company_bank_accounts"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    
+    bank_name = Column(String(150), nullable=False)
+    account_number = Column(String(50), nullable=False)
+    account_holder_name = Column(String(200), nullable=True)
+    ifsc_code = Column(String(20), nullable=True)
+    branch_name = Column(String(150), nullable=True)
+    
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    
+    # Relationship to company
+    company = relationship("Company", back_populates="bank_accounts")

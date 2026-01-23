@@ -5,8 +5,17 @@ from typing import List, Optional
 from datetime import date
 
 from database import get_db, engine
-from models import Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment, InflowReceiptMaster
-from schemas import CustomerReceiptCreate, CustomerReceiptResponse, BankLoanReceiptCreate, BankLoanReceiptResponse, VendorPaymentCreate, VendorPaymentResponse, EmployeePaymentCreate, EmployeePaymentResponse, InflowReceiptMasterResponse
+from models import Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment, InflowReceiptMaster, Company, CompanyBankAccount
+from schemas import (
+    CustomerReceiptCreate, CustomerReceiptResponse, 
+    BankLoanReceiptCreate, BankLoanReceiptResponse, 
+    VendorPaymentCreate, VendorPaymentResponse, 
+    EmployeePaymentCreate, EmployeePaymentResponse, 
+    InflowReceiptMasterResponse,
+    CompanyCreate, CompanyResponse,
+    CompanyBankAccountCreate, CompanyBankAccountResponse,
+    CompanyWithBankAccounts
+)
 from firebase_storage import upload_file_to_firebase
 
 # Create database tables
@@ -434,6 +443,92 @@ def get_inflow_receipt_master(entity_id: int, db: Session = Depends(get_db)):
             detail=f"Inflow receipt master with id {entity_id} not found"
         )
     return record
+
+
+# Company Endpoints
+
+@app.post("/api/companies", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
+def create_company(company: CompanyCreate, db: Session = Depends(get_db)):
+    """
+    Create a new company with bank accounts in a single API call
+    """
+    try:
+        company_data = company.dict()
+        bank_accounts_data = company_data.pop("bank_accounts", [])
+        
+        # Create company
+        db_company = Company(**company_data)
+        db.add(db_company)
+        db.flush()  # Flush to get the company ID without committing
+        
+        # Create bank accounts if provided
+        if bank_accounts_data:
+            for bank_account_data in bank_accounts_data:
+                bank_account_data["company_id"] = db_company.id
+                db_bank_account = CompanyBankAccount(**bank_account_data)
+                db.add(db_bank_account)
+        
+        db.commit()
+        db.refresh(db_company)
+        return db_company
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error creating company: {str(e)}"
+        )
+
+
+@app.get("/api/companies")
+def list_companies(db: Session = Depends(get_db)):
+    """
+    List all companies with their bank accounts in the specified format
+    """
+    try:
+        companies = db.query(Company).order_by(Company.created_at.desc()).all()
+        
+        result = []
+        for company in companies:
+            # Get bank accounts for this company
+            bank_accounts = db.query(CompanyBankAccount).filter(
+                CompanyBankAccount.company_id == company.id
+            ).all()
+            
+            # Format bank accounts
+            bank_accounts_list = [
+                {
+                    "id": ba.id,
+                    "bank_name": ba.bank_name,
+                    "account_holder_name": ba.account_holder_name,
+                    "account_number": ba.account_number,
+                    "ifsc_code": ba.ifsc_code,
+                    "branch_name": ba.branch_name
+                }
+                for ba in bank_accounts
+            ]
+            
+            # Format company data
+            result.append({
+                "company": {
+                    "id": company.id,
+                    "company_name": company.company_name,
+                    "created_at": company.created_at.isoformat()
+                },
+                "bank_accounts": bank_accounts_list
+            })
+        
+        return {
+            "success": True,
+            "message": "Company list fetched successfully",
+            "data": {
+                "companies": result
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching companies: {str(e)}"
+        )
 
 
 if __name__ == "__main__":

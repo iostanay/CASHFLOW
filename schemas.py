@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import date, datetime
 from models import ReceiptType, ReceiptMode, PaymentPurpose, PaymentType, EmployeePaymentPurpose
 
@@ -144,6 +144,64 @@ class EmployeePaymentResponse(BaseModel):
 class InflowReceiptMasterResponse(BaseModel):
     entity_id: int
     name: str
+
+    class Config:
+        from_attributes = True
+
+
+# Company Schemas
+class CompanyBankAccountCreate(BaseModel):
+    bank_name: str = Field(..., max_length=150, description="Name of the bank")
+    account_number: str = Field(..., max_length=50, description="Bank account number")
+    account_holder_name: Optional[str] = Field(None, max_length=200, description="Account holder name")
+    ifsc_code: Optional[str] = Field(None, max_length=20, description="IFSC code")
+    branch_name: Optional[str] = Field(None, max_length=150, description="Branch name")
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyCreate(BaseModel):
+    company_name: str = Field(..., max_length=200, description="Name of the company")
+    bank_accounts: Optional[List[CompanyBankAccountCreate]] = Field(default=[], description="List of bank accounts for the company")
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyResponse(BaseModel):
+    id: int
+    company_name: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyBankAccountResponse(BaseModel):
+    id: int
+    bank_name: str
+    account_holder_name: Optional[str]
+    account_number: str
+    ifsc_code: Optional[str]
+    branch_name: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyWithBankAccounts(BaseModel):
+    company: CompanyResponse
+    bank_accounts: List[CompanyBankAccountResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class CompanyListResponse(BaseModel):
+    success: bool
+    message: str
+    data: dict
 
     class Config:
         from_attributes = True
