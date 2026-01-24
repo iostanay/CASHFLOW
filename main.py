@@ -839,19 +839,19 @@ def list_inflow_form_sources(
     db: Session = Depends(get_db),
 ):
     """
-    Get sources from inflow_forms filtered by flow_type and mode.
-    Equivalent to: SELECT source FROM inflow_forms WHERE flow_type = ? AND mode = ?
+    Get id and source from inflow_forms filtered by flow_type and mode.
+    Equivalent to: SELECT id, source FROM inflow_forms WHERE flow_type = ? AND mode = ?
     """
     try:
         rows = (
-            db.query(InflowForm.source)
+            db.query(InflowForm.id, InflowForm.source)
             .filter(InflowForm.flow_type == flow_type, InflowForm.mode == mode)
             .order_by(InflowForm.updated_at.desc())
             .offset(skip)
             .limit(limit)
             .all()
         )
-        return [InflowFormSourceResponse(source=r[0]) for r in rows]
+        return [InflowFormSourceResponse(id=r[0], source=r[1]) for r in rows]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

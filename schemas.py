@@ -310,7 +310,8 @@ class InflowFormResponse(BaseModel):
 
 
 class InflowFormSourceResponse(BaseModel):
-    """Response with only source (SELECT source FROM inflow_forms WHERE ...)"""
+    """Response with id and source (SELECT id, source FROM inflow_forms WHERE ...)"""
+    id: int
     source: str
 
 
