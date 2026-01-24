@@ -309,6 +309,11 @@ class InflowFormResponse(BaseModel):
         from_attributes = True
 
 
+class InflowFormSourceResponse(BaseModel):
+    """Response with only source (SELECT source FROM inflow_forms WHERE ...)"""
+    source: str
+
+
 # --- Inflow Form Fields ---
 
 class InflowFormFieldCreate(BaseModel):

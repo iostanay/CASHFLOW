@@ -19,7 +19,7 @@ from schemas import (
     CompanyCreate, CompanyResponse, CompanyUpdate,
     CompanyBankAccountCreate, CompanyBankAccountResponse,
     CompanyWithBankAccounts, CompanyCreateResponse,
-    InflowFormCreateWithFields, InflowFormCreate, InflowFormUpdate, InflowFormResponse, InflowFormWithFieldsResponse,
+    InflowFormCreateWithFields, InflowFormCreate, InflowFormUpdate, InflowFormResponse, InflowFormWithFieldsResponse, InflowFormSourceResponse,
     InflowFormFieldCreate, InflowFormFieldUpdate, InflowFormFieldResponse, CustomFieldResponse,
 )
 from firebase_storage import upload_file_to_firebase
@@ -803,25 +803,59 @@ def create_inflow_form_with_fields(payload: InflowFormCreateWithFields, db: Sess
 
 @app.get("/api/inflow-forms", response_model=List[InflowFormResponse])
 def list_inflow_forms(
+    flow_type: str,
+    mode: str,
     skip: int = 0,
     limit: int = 100,
-    flow_type: Optional[str] = None,
-    mode: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """List inflow forms. Optional filters: flow_type, mode."""
+    """
+    Get inflow forms filtered by flow_type and mode.
+    Equivalent to: SELECT * FROM inflow_forms WHERE flow_type = ? AND mode = ?
+    """
     try:
-        query = db.query(InflowForm)
-        if flow_type:
-            query = query.filter(InflowForm.flow_type == flow_type)
-        if mode:
-            query = query.filter(InflowForm.mode == mode)
-        forms = query.order_by(InflowForm.updated_at.desc()).offset(skip).limit(limit).all()
+        query = (
+            db.query(InflowForm)
+            .filter(InflowForm.flow_type == flow_type, InflowForm.mode == mode)
+            .order_by(InflowForm.updated_at.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        forms = query.all()
         return forms
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error fetching inflow forms: {str(e)}"
+        )
+
+
+@app.get("/api/inflow-forms/sources", response_model=List[InflowFormSourceResponse])
+def list_inflow_form_sources(
+    flow_type: str,
+    mode: str,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+):
+    """
+    Get sources from inflow_forms filtered by flow_type and mode.
+    Equivalent to: SELECT source FROM inflow_forms WHERE flow_type = ? AND mode = ?
+    """
+    try:
+        rows = (
+            db.query(InflowForm.source)
+            .filter(InflowForm.flow_type == flow_type, InflowForm.mode == mode)
+            .order_by(InflowForm.updated_at.desc())
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+        return [InflowFormSourceResponse(source=r[0]) for r in rows]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching sources: {str(e)}"
         )
 
 
