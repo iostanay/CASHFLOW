@@ -200,11 +200,6 @@ class InflowModeEnum(str, enum.Enum):
     UPI = "UPI"
 
 
-class FormStatusEnum(str, enum.Enum):
-    ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
-
-
 class FieldTypeEnum(str, enum.Enum):
     TEXT = "TEXT"
     NUMBER = "NUMBER"
@@ -217,18 +212,14 @@ class InflowForm(Base):
     __tablename__ = "inflow_forms"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
-
     flow_type = Column(Enum(FlowTypeEnum, native_enum=False, length=20), nullable=False)
     mode = Column(Enum(InflowModeEnum, native_enum=False, length=20), nullable=False)
     source = Column(String(150), nullable=False)
-    status = Column(Enum(FormStatusEnum, native_enum=False, length=20), default=FormStatusEnum.ACTIVE, nullable=False)
 
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
     fields = relationship("InflowFormField", back_populates="inflow_form", cascade="all, delete-orphan")
-    company = relationship("Company")
 
 
 class InflowFormField(Base):

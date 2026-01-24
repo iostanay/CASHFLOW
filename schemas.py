@@ -3,7 +3,7 @@ from typing import Optional, List, Any
 from datetime import date, datetime
 from models import (
     ReceiptType, ReceiptMode, PaymentPurpose, PaymentType, EmployeePaymentPurpose,
-    FlowTypeEnum, InflowModeEnum, FormStatusEnum, FieldTypeEnum,
+    FlowTypeEnum, InflowModeEnum, FieldTypeEnum,
 )
 
 
@@ -269,11 +269,9 @@ class CustomFieldCreate(BaseModel):
 
 class InflowFormCreateWithFields(BaseModel):
     """Create inflow form with fields in one request"""
-    company_id: int = Field(..., description="Company ID")
     flow_type: FlowTypeEnum = Field(..., description="INFLOW or OUTFLOW")
     mode: InflowModeEnum = Field(..., description="BANK, CASH, or UPI")
     source: str = Field(..., max_length=150, description="Source")
-    status: Optional[FormStatusEnum] = Field(default=FormStatusEnum.ACTIVE, description="ACTIVE or INACTIVE")
     custom_fields: List[CustomFieldCreate] = Field(default=[], description="List of custom fields")
 
     class Config:
@@ -282,11 +280,9 @@ class InflowFormCreateWithFields(BaseModel):
 
 class InflowFormCreate(BaseModel):
     """Create inflow form without fields"""
-    company_id: int = Field(..., description="Company ID")
     flow_type: FlowTypeEnum = Field(..., description="INFLOW or OUTFLOW")
     mode: InflowModeEnum = Field(..., description="BANK, CASH, or UPI")
     source: str = Field(..., max_length=150, description="Source")
-    status: Optional[FormStatusEnum] = Field(default=FormStatusEnum.ACTIVE, description="ACTIVE or INACTIVE")
 
     class Config:
         use_enum_values = True
@@ -296,7 +292,6 @@ class InflowFormUpdate(BaseModel):
     flow_type: Optional[FlowTypeEnum] = None
     mode: Optional[InflowModeEnum] = None
     source: Optional[str] = Field(None, max_length=150)
-    status: Optional[FormStatusEnum] = None
 
     class Config:
         use_enum_values = True
@@ -304,11 +299,9 @@ class InflowFormUpdate(BaseModel):
 
 class InflowFormResponse(BaseModel):
     id: int
-    company_id: int
     flow_type: str
     mode: str
     source: str
-    status: str
     created_at: datetime
     updated_at: datetime
 

@@ -741,47 +741,34 @@ def delete_company(company_id: int, db: Session = Depends(get_db)):
 def create_inflow_form_with_fields(payload: InflowFormCreateWithFields, db: Session = Depends(get_db)):
     """
     Create a new inflow form with custom fields in one request.
-    Accepts the structure: {flow_type, mode, source, custom_fields: [{field_key, label, type, required, options}]}
+    Accepts: {flow_type, mode, source, custom_fields: [{field_key, label, type, required, options}]}
     """
     try:
-        # Verify company exists
-        company = db.query(Company).filter(Company.id == payload.company_id).first()
-        if not company:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Company with id {payload.company_id} not found"
-            )
-        
-        # Create form
         form_data = payload.model_dump(exclude={"custom_fields"})
         db_form = InflowForm(**form_data)
         db.add(db_form)
-        db.flush()  # Get form ID without committing
-        
-        # Create fields
+        db.flush()
+
         created_fields = []
         for idx, custom_field in enumerate(payload.custom_fields):
             field_data = {
                 "inflow_form_id": db_form.id,
                 "field_key": custom_field.field_key,
                 "label": custom_field.label,
-                "field_type": custom_field.type,  # Map 'type' to 'field_type'
-                "is_required": custom_field.required,  # Map 'required' to 'is_required'
+                "field_type": custom_field.type,
+                "is_required": custom_field.required,
                 "options": custom_field.options,
                 "sort_order": idx,
             }
             db_field = InflowFormField(**field_data)
             db.add(db_field)
             created_fields.append(db_field)
-        
+
         db.commit()
         db.refresh(db_form)
-        
-        # Refresh all fields to get IDs
         for field in created_fields:
             db.refresh(field)
-        
-        # Format response with custom_fields
+
         custom_fields_response = [
             CustomFieldResponse(
                 field_key=f.field_key,
@@ -792,15 +779,13 @@ def create_inflow_form_with_fields(payload: InflowFormCreateWithFields, db: Sess
             )
             for f in sorted(created_fields, key=lambda x: (x.sort_order, x.id))
         ]
-        
+
         _val = lambda e: e.value if hasattr(e, "value") else e
         return InflowFormWithFieldsResponse(
             id=db_form.id,
-            company_id=db_form.company_id,
             flow_type=_val(db_form.flow_type),
             mode=_val(db_form.mode),
             source=db_form.source,
-            status=_val(db_form.status),
             created_at=db_form.created_at,
             updated_at=db_form.updated_at,
             custom_fields=custom_fields_response,
@@ -818,28 +803,19 @@ def create_inflow_form_with_fields(payload: InflowFormCreateWithFields, db: Sess
 
 @app.get("/api/inflow-forms", response_model=List[InflowFormResponse])
 def list_inflow_forms(
-    company_id: int,
     skip: int = 0,
     limit: int = 100,
     flow_type: Optional[str] = None,
     mode: Optional[str] = None,
-    status: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
-    """
-    List inflow forms filtered by company_id (required).
-    Optional filters: flow_type, mode, status.
-    """
+    """List inflow forms. Optional filters: flow_type, mode."""
     try:
-        query = db.query(InflowForm).filter(InflowForm.company_id == company_id)
-        
+        query = db.query(InflowForm)
         if flow_type:
             query = query.filter(InflowForm.flow_type == flow_type)
         if mode:
             query = query.filter(InflowForm.mode == mode)
-        if status:
-            query = query.filter(InflowForm.status == status)
-        
         forms = query.order_by(InflowForm.updated_at.desc()).offset(skip).limit(limit).all()
         return forms
     except Exception as e:
@@ -874,11 +850,9 @@ def get_inflow_form(form_id: int, db: Session = Depends(get_db)):
     
     return InflowFormWithFieldsResponse(
         id=form.id,
-        company_id=form.company_id,
         flow_type=_val(form.flow_type),
         mode=_val(form.mode),
         source=form.source,
-        status=_val(form.status),
         created_at=form.created_at,
         updated_at=form.updated_at,
         custom_fields=custom_fields_response,
