@@ -1,4 +1,5 @@
-from sqlalchemy import Column, BigInteger, Integer, String, Date, Enum, DECIMAL, Text, TIMESTAMP, ForeignKey
+from sqlalchemy import Column, BigInteger, Integer, String, Date, Enum, DECIMAL, Text, TIMESTAMP, ForeignKey, Boolean
+from sqlalchemy.dialects.mysql import JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -184,3 +185,57 @@ class CompanyBankAccount(Base):
     
     # Relationship to company
     company = relationship("Company", back_populates="bank_accounts")
+
+
+# --- Inflow Forms ---
+
+class FlowTypeEnum(str, enum.Enum):
+    INFLOW = "INFLOW"
+    OUTFLOW = "OUTFLOW"
+
+
+class InflowModeEnum(str, enum.Enum):
+    BANK = "BANK"
+    CASH = "CASH"
+
+
+class FieldTypeEnum(str, enum.Enum):
+    TEXT = "TEXT"
+    NUMBER = "NUMBER"
+    DATE = "DATE"
+    SPINNER = "SPINNER"
+    TEXTAREA = "TEXTAREA"
+
+
+class InflowForm(Base):
+    __tablename__ = "inflow_forms"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    company_id = Column(BigInteger, nullable=False)
+
+    flow_type = Column(Enum(FlowTypeEnum, native_enum=False, length=20), nullable=False)
+    mode = Column(Enum(InflowModeEnum, native_enum=False, length=20), nullable=False)
+    source = Column(String(150), nullable=False)
+
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+    fields = relationship("InflowFormField", back_populates="inflow_form", cascade="all, delete-orphan")
+
+
+class InflowFormField(Base):
+    __tablename__ = "inflow_form_fields"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    inflow_form_id = Column(BigInteger, ForeignKey("inflow_forms.id", ondelete="CASCADE"), nullable=False)
+
+    field_key = Column(String(100), nullable=False)
+    label = Column(String(150), nullable=False)
+    field_type = Column(Enum(FieldTypeEnum, native_enum=False, length=20), nullable=False)
+    is_required = Column(Boolean, default=False)
+    options = Column(JSON, nullable=True)  # for SPINNER / dropdown
+    sort_order = Column(Integer, default=0)
+
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+
+    inflow_form = relationship("InflowForm", back_populates="fields")

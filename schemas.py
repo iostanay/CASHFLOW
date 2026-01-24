@@ -1,7 +1,10 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import date, datetime
-from models import ReceiptType, ReceiptMode, PaymentPurpose, PaymentType, EmployeePaymentPurpose
+from models import (
+    ReceiptType, ReceiptMode, PaymentPurpose, PaymentType, EmployeePaymentPurpose,
+    FlowTypeEnum, InflowModeEnum, FieldTypeEnum,
+)
 
 
 class CustomerReceiptCreate(BaseModel):
@@ -245,6 +248,90 @@ class CompanyListResponse(BaseModel):
     success: bool
     message: str
     data: dict
+
+    class Config:
+        from_attributes = True
+
+
+# --- Inflow Forms ---
+
+class InflowFormCreate(BaseModel):
+    company_id: int = Field(..., description="Company ID")
+    flow_type: FlowTypeEnum = Field(..., description="INFLOW or OUTFLOW")
+    mode: InflowModeEnum = Field(..., description="BANK or CASH")
+    source: str = Field(..., max_length=150, description="Source")
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormUpdate(BaseModel):
+    flow_type: Optional[FlowTypeEnum] = None
+    mode: Optional[InflowModeEnum] = None
+    source: Optional[str] = Field(None, max_length=150)
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormResponse(BaseModel):
+    id: int
+    company_id: int
+    flow_type: str
+    mode: str
+    source: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# --- Inflow Form Fields ---
+
+class InflowFormFieldCreate(BaseModel):
+    inflow_form_id: int = Field(..., description="Parent inflow form ID")
+    field_key: str = Field(..., max_length=100, description="Field key")
+    label: str = Field(..., max_length=150, description="Display label")
+    field_type: FieldTypeEnum = Field(..., description="TEXT, NUMBER, DATE, SPINNER, TEXTAREA")
+    is_required: bool = Field(default=False, description="Whether field is required")
+    options: Optional[Any] = Field(None, description="JSON options for SPINNER/dropdown")
+    sort_order: int = Field(default=0, description="Sort order")
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormFieldUpdate(BaseModel):
+    field_key: Optional[str] = Field(None, max_length=100)
+    label: Optional[str] = Field(None, max_length=150)
+    field_type: Optional[FieldTypeEnum] = None
+    is_required: Optional[bool] = None
+    options: Optional[Any] = None
+    sort_order: Optional[int] = None
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormFieldResponse(BaseModel):
+    id: int
+    inflow_form_id: int
+    field_key: str
+    label: str
+    field_type: str
+    is_required: bool
+    options: Optional[Any]
+    sort_order: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InflowFormWithFieldsResponse(InflowFormResponse):
+    """Inflow form with nested fields (for GET by id)"""
+    fields: List[InflowFormFieldResponse] = []
 
     class Config:
         from_attributes = True

@@ -5,16 +5,22 @@ from typing import List, Optional
 from datetime import date
 
 from database import get_db, engine
-from models import Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment, InflowReceiptMaster, Company, CompanyBankAccount
+from models import (
+    Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment,
+    InflowReceiptMaster, Company, CompanyBankAccount,
+    InflowForm, InflowFormField,
+)
 from schemas import (
-    CustomerReceiptCreate, CustomerReceiptResponse, 
-    BankLoanReceiptCreate, BankLoanReceiptResponse, 
-    VendorPaymentCreate, VendorPaymentResponse, 
-    EmployeePaymentCreate, EmployeePaymentResponse, 
+    CustomerReceiptCreate, CustomerReceiptResponse,
+    BankLoanReceiptCreate, BankLoanReceiptResponse,
+    VendorPaymentCreate, VendorPaymentResponse,
+    EmployeePaymentCreate, EmployeePaymentResponse,
     InflowReceiptMasterResponse,
     CompanyCreate, CompanyResponse, CompanyUpdate,
     CompanyBankAccountCreate, CompanyBankAccountResponse,
-    CompanyWithBankAccounts, CompanyCreateResponse
+    CompanyWithBankAccounts, CompanyCreateResponse,
+    InflowFormCreate, InflowFormUpdate, InflowFormResponse, InflowFormWithFieldsResponse,
+    InflowFormFieldCreate, InflowFormFieldUpdate, InflowFormFieldResponse,
 )
 from firebase_storage import upload_file_to_firebase
 
@@ -726,6 +732,223 @@ def delete_company(company_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error deleting company: {str(e)}"
+        )
+
+
+# --- Inflow Forms ---
+
+@app.post("/api/inflow-forms", response_model=InflowFormResponse, status_code=status.HTTP_201_CREATED)
+def create_inflow_form(payload: InflowFormCreate, db: Session = Depends(get_db)):
+    """Create a new inflow form."""
+    try:
+        db_form = InflowForm(**payload.model_dump())
+        db.add(db_form)
+        db.commit()
+        db.refresh(db_form)
+        return db_form
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error creating inflow form: {str(e)}"
+        )
+
+
+@app.get("/api/inflow-forms", response_model=List[InflowFormResponse])
+def list_inflow_forms(
+    skip: int = 0,
+    limit: int = 100,
+    company_id: Optional[int] = None,
+    flow_type: Optional[str] = None,
+    mode: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """List inflow forms with optional filters."""
+    try:
+        query = db.query(InflowForm)
+        if company_id is not None:
+            query = query.filter(InflowForm.company_id == company_id)
+        if flow_type:
+            query = query.filter(InflowForm.flow_type == flow_type)
+        if mode:
+            query = query.filter(InflowForm.mode == mode)
+        forms = query.order_by(InflowForm.updated_at.desc()).offset(skip).limit(limit).all()
+        return forms
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching inflow forms: {str(e)}"
+        )
+
+
+@app.get("/api/inflow-forms/{form_id}", response_model=InflowFormWithFieldsResponse)
+def get_inflow_form(form_id: int, db: Session = Depends(get_db)):
+    """Get an inflow form by ID with its fields."""
+    form = db.query(InflowForm).filter(InflowForm.id == form_id).first()
+    if not form:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow form with id {form_id} not found"
+        )
+    _val = lambda e: e.value if hasattr(e, "value") else e
+    fields = [InflowFormFieldResponse.model_validate(f) for f in sorted(form.fields, key=lambda x: (x.sort_order, x.id))]
+    return InflowFormWithFieldsResponse(
+        id=form.id,
+        company_id=form.company_id,
+        flow_type=_val(form.flow_type),
+        mode=_val(form.mode),
+        source=form.source,
+        created_at=form.created_at,
+        updated_at=form.updated_at,
+        fields=fields,
+    )
+
+
+@app.put("/api/inflow-forms/{form_id}", response_model=InflowFormResponse)
+def update_inflow_form(form_id: int, payload: InflowFormUpdate, db: Session = Depends(get_db)):
+    """Update an inflow form by ID."""
+    form = db.query(InflowForm).filter(InflowForm.id == form_id).first()
+    if not form:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow form with id {form_id} not found"
+        )
+    try:
+        data = payload.model_dump(exclude_unset=True)
+        for k, v in data.items():
+            setattr(form, k, v)
+        db.commit()
+        db.refresh(form)
+        return form
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error updating inflow form: {str(e)}"
+        )
+
+
+@app.delete("/api/inflow-forms/{form_id}")
+def delete_inflow_form(form_id: int, db: Session = Depends(get_db)):
+    """Delete an inflow form by ID (cascades to fields)."""
+    form = db.query(InflowForm).filter(InflowForm.id == form_id).first()
+    if not form:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow form with id {form_id} not found"
+        )
+    try:
+        db.delete(form)
+        db.commit()
+        return {"success": True, "message": f"Inflow form {form_id} deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error deleting inflow form: {str(e)}"
+        )
+
+
+# --- Inflow Form Fields ---
+
+@app.post("/api/inflow-form-fields", response_model=InflowFormFieldResponse, status_code=status.HTTP_201_CREATED)
+def create_inflow_form_field(payload: InflowFormFieldCreate, db: Session = Depends(get_db)):
+    """Create a new inflow form field."""
+    form = db.query(InflowForm).filter(InflowForm.id == payload.inflow_form_id).first()
+    if not form:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow form with id {payload.inflow_form_id} not found"
+        )
+    try:
+        db_field = InflowFormField(**payload.model_dump())
+        db.add(db_field)
+        db.commit()
+        db.refresh(db_field)
+        return db_field
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error creating inflow form field: {str(e)}"
+        )
+
+
+@app.get("/api/inflow-form-fields", response_model=List[InflowFormFieldResponse])
+def list_inflow_form_fields(
+    skip: int = 0,
+    limit: int = 100,
+    inflow_form_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """List inflow form fields, optionally filtered by form."""
+    try:
+        query = db.query(InflowFormField)
+        if inflow_form_id is not None:
+            query = query.filter(InflowFormField.inflow_form_id == inflow_form_id)
+        fields = query.order_by(InflowFormField.sort_order, InflowFormField.id).offset(skip).limit(limit).all()
+        return fields
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching inflow form fields: {str(e)}"
+        )
+
+
+@app.get("/api/inflow-form-fields/{field_id}", response_model=InflowFormFieldResponse)
+def get_inflow_form_field(field_id: int, db: Session = Depends(get_db)):
+    """Get an inflow form field by ID."""
+    field = db.query(InflowFormField).filter(InflowFormField.id == field_id).first()
+    if not field:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow form field with id {field_id} not found"
+        )
+    return field
+
+
+@app.put("/api/inflow-form-fields/{field_id}", response_model=InflowFormFieldResponse)
+def update_inflow_form_field(field_id: int, payload: InflowFormFieldUpdate, db: Session = Depends(get_db)):
+    """Update an inflow form field by ID."""
+    field = db.query(InflowFormField).filter(InflowFormField.id == field_id).first()
+    if not field:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow form field with id {field_id} not found"
+        )
+    try:
+        data = payload.model_dump(exclude_unset=True)
+        for k, v in data.items():
+            setattr(field, k, v)
+        db.commit()
+        db.refresh(field)
+        return field
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error updating inflow form field: {str(e)}"
+        )
+
+
+@app.delete("/api/inflow-form-fields/{field_id}")
+def delete_inflow_form_field(field_id: int, db: Session = Depends(get_db)):
+    """Delete an inflow form field by ID."""
+    field = db.query(InflowFormField).filter(InflowFormField.id == field_id).first()
+    if not field:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Inflow form field with id {field_id} not found"
+        )
+    try:
+        db.delete(field)
+        db.commit()
+        return {"success": True, "message": f"Inflow form field {field_id} deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error deleting inflow form field: {str(e)}"
         )
 
 
