@@ -955,25 +955,25 @@ def create_inflow_form_field(payload: InflowFormFieldCreate, db: Session = Depen
         )
 
 
-@app.get("/api/inflow-form-fields", response_model=List[InflowFormFieldResponse])
-def list_inflow_form_fields(
-    skip: int = 0,
-    limit: int = 100,
-    inflow_form_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-):
-    """List inflow form fields, optionally filtered by form."""
-    try:
-        query = db.query(InflowFormField)
-        if inflow_form_id is not None:
-            query = query.filter(InflowFormField.inflow_form_id == inflow_form_id)
-        fields = query.order_by(InflowFormField.sort_order, InflowFormField.id).offset(skip).limit(limit).all()
-        return fields
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching inflow form fields: {str(e)}"
-        )
+# @app.get("/api/inflow-form-fields", response_model=List[InflowFormFieldResponse])
+# def list_inflow_form_fields(
+#     skip: int = 0,
+#     limit: int = 100,
+#     inflow_form_id: Optional[int] = None,
+#     db: Session = Depends(get_db),
+# ):
+#     """List inflow form fields, optionally filtered by form."""
+#     try:
+#         query = db.query(InflowFormField)
+#         if inflow_form_id is not None:
+#             query = query.filter(InflowFormField.inflow_form_id == inflow_form_id)
+#         fields = query.order_by(InflowFormField.sort_order, InflowFormField.id).offset(skip).limit(limit).all()
+#         return fields
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error fetching inflow form fields: {str(e)}"
+#         )
 
 
 @app.get("/api/inflow-form-fields/{field_id}", response_model=InflowFormFieldResponse)
