@@ -174,25 +174,45 @@ def upload_file_to_railway(file_content: bytes, file_name: str, folder: str = "a
             print(f"Warning: Upload completed but verification failed: {str(verify_error)}")
             # Still return URL as upload might have succeeded
         
-        # Construct URL - Railway Storage might need presigned URLs for access
+        # Construct URL - Railway Storage requires presigned URLs for access
         encoded_path = quote(storage_path, safe='/')
         
-        # Always generate presigned URL for reliable access (valid for 1 year)
-        # Railway Storage might not support public bucket access, so presigned URLs are more reliable
+        # Generate presigned URL for reliable access (valid for 1 year)
+        # Railway Storage buckets are private by default, presigned URLs are required
+        print(f"🔍 Generating presigned URL for: {storage_path}")
         try:
+            # Generate presigned URL - this is the ONLY way to access files in private Railway Storage buckets
             presigned_url = _railway_s3_client.generate_presigned_url(
-                'get_object',
-                Params={'Bucket': RAILWAY_STORAGE_BUCKET, 'Key': storage_path},
-                ExpiresIn=31536000  # 1 year (31536000 seconds)
+                ClientMethod='get_object',
+                Params={
+                    'Bucket': RAILWAY_STORAGE_BUCKET,
+                    'Key': storage_path
+                },
+                ExpiresIn=31536000  # 1 year (31536000 seconds = 365 days)
             )
-            print(f"✓ Generated presigned URL (valid for 1 year): {presigned_url[:80]}...")
-            return presigned_url
+            
+            if presigned_url and len(presigned_url) > 0 and presigned_url.startswith('http'):
+                print(f"✓ Successfully generated presigned URL (valid for 1 year)")
+                print(f"  URL preview: {presigned_url[:80]}...")
+                return presigned_url
+            else:
+                raise Exception(f"Invalid presigned URL format: {presigned_url[:50] if presigned_url else 'None'}")
+                
+        except ClientError as presign_error:
+            error_code = presign_error.response.get('Error', {}).get('Code', 'Unknown')
+            error_msg = presign_error.response.get('Error', {}).get('Message', str(presign_error))
+            print(f"✗ Failed to generate presigned URL")
+            print(f"  Error Code: {error_code}")
+            print(f"  Error Message: {error_msg}")
+            print(f"  Full error: {presign_error}")
+            # Don't fallback to public URL - it won't work
+            raise Exception(f"Cannot generate accessible URL. Railway Storage error [{error_code}]: {error_msg}. Presigned URLs are required for private buckets.")
+            
         except Exception as presign_error:
-            print(f"⚠ Could not generate presigned URL: {str(presign_error)}")
-            # Fallback to public URL format (might not work if bucket is private)
-            public_url = f"{RAILWAY_STORAGE_ENDPOINT}/{RAILWAY_STORAGE_BUCKET}/{encoded_path}"
-            print(f"⚠ Using public URL format (may require bucket to be public): {public_url}")
-            return public_url
+            print(f"✗ Unexpected error generating presigned URL: {str(presign_error)}")
+            import traceback
+            traceback.print_exc()
+            raise Exception(f"Failed to generate presigned URL: {str(presign_error)}")
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
         error_message = e.response.get('Error', {}).get('Message', str(e))
