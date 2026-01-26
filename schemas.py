@@ -35,6 +35,7 @@ class CustomerReceiptResponse(BaseModel):
     project_name: Optional[str]
     company_name: Optional[str]
     remarks: Optional[str]
+    attachment_path: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -308,6 +309,7 @@ class InflowFormResponse(BaseModel):
     flow_type: str
     mode: str
     source: str
+    attachment: bool
     created_at: datetime
     updated_at: datetime
 
