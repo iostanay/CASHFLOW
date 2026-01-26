@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Transaction - File Upload</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="number"],
+        textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+
+        input[type="number"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .file-upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            background: #f8f9ff;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .file-upload-area:hover {
+            background: #f0f2ff;
+            border-color: #764ba2;
+        }
+
+        .file-upload-area.dragover {
+            background: #e8ebff;
+            border-color: #764ba2;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            display: block;
+            cursor: pointer;
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .file-info {
+            color: #666;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .file-list {
+            margin-top: 15px;
+            text-align: left;
+        }
+
+        .file-item {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            border: 1px solid #e0e0e0;
+        }
+
+        .file-item .remove-btn {
+            background: #ff4444;
+            color: white;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .remove-btn:hover {
+            background: #cc0000;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .response.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .response.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+
+        .response pre {
+            margin-top: 10px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 12px;
+        }
+
+        .api-url-input {
+            margin-bottom: 20px;
+        }
+
+        .api-url-input input {
+            font-size: 12px;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📤 Add Transaction</h1>
+        <p class="subtitle">Upload files from your system and create transaction</p>
+
+        <form id="transactionForm">
+            <div class="form-group api-url-input">
+                <label for="apiUrl">API URL:</label>
+                <input 
+                    type="text" 
+                    id="apiUrl" 
+                    value="https://cashflow-production-ac48.up.railway.app/api/add-transaction"
+                    placeholder="Enter API endpoint URL"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="companyId">Company ID *</label>
+                <input 
+                    type="number" 
+                    id="companyId" 
+                    required 
+                    placeholder="Enter company ID"
+                    value="1"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="inflowFormId">Inflow Form ID *</label>
+                <input 
+                    type="number" 
+                    id="inflowFormId" 
+                    required 
+                    placeholder="Enter inflow form ID"
+                    value="10"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="payload">Payload (JSON) *</label>
+                <textarea 
+                    id="payload" 
+                    required 
+                    placeholder='{"transaction_id": "TXN123", "amount": 5000, "transaction_date": "2026-01-23", "payment_method": "UPI", "remarks": "Advance payment"}'
+                >{"transaction_id": "TXN123", "amount": 5000, "transaction_date": "2026-01-23", "payment_method": "UPI", "remarks": "Advance payment"}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Upload Files (from your system)</label>
+                <div class="file-upload-area" id="fileUploadArea">
+                    <label for="fileInput" class="file-label">
+                        📁 Click to select files or drag & drop
+                    </label>
+                    <input 
+                        type="file" 
+                        id="fileInput" 
+                        multiple 
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.txt"
+                    />
+                    <div class="file-info">You can select multiple files</div>
+                    <div class="file-list" id="fileList"></div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+                🚀 Submit Transaction
+            </button>
+        </form>
+
+        <div class="response" id="response"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('transactionForm');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const fileUploadArea = document.getElementById('fileUploadArea');
+        const submitBtn = document.getElementById('submitBtn');
+        const responseDiv = document.getElementById('response');
+        let selectedFiles = [];
+
+        // File selection handler
+        fileInput.addEventListener('change', function(e) {
+            handleFiles(Array.from(e.target.files));
+        });
+
+        // Drag and drop handlers
+        fileUploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            fileUploadArea.classList.add('dragover');
+        });
+
+        fileUploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
+        });
+
+        fileUploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        });
+
+        function handleFiles(files) {
+            files.forEach(file => {
+                if (!selectedFiles.find(f => f.name === file.name && f.size === file.size)) {
+                    selectedFiles.push(file);
+                }
+            });
+            updateFileList();
+        }
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <span>📄 ${file.name} (${formatFileSize(file.size)})</span>
+                    <button type="button" class="remove-btn" onclick="removeFile(${index})">Remove</button>
+                `;
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            updateFileList();
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Form submission
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const apiUrl = document.getElementById('apiUrl').value;
+            const companyId = document.getElementById('companyId').value;
+            const inflowFormId = document.getElementById('inflowFormId').value;
+            const payload = document.getElementById('payload').value;
+
+            // Validate JSON payload
+            let payloadObj;
+            try {
+                payloadObj = JSON.parse(payload);
+            } catch (error) {
+                showResponse('error', 'Invalid JSON in payload: ' + error.message);
+                return;
+            }
+
+            // Create FormData
+            const formData = new FormData();
+            formData.append('company_id', companyId);
+            formData.append('inflow_form_id', inflowFormId);
+            formData.append('payload', JSON.stringify(payloadObj));
+
+            // Add files
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ Uploading...';
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showResponse('success', 'Transaction created successfully!', data);
+                } else {
+                    showResponse('error', 'Error: ' + (data.detail || 'Unknown error'), data);
+                }
+            } catch (error) {
+                showResponse('error', 'Network error: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 Submit Transaction';
+            }
+        });
+
+        function showResponse(type, message, data = null) {
+            responseDiv.className = 'response ' + type;
+            responseDiv.style.display = 'block';
+            responseDiv.innerHTML = `
+                <strong>${message}</strong>
+                ${data ? '<pre>' + JSON.stringify(data, null, 2) + '</pre>' : ''}
+            `;
+            responseDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Make removeFile available globally
+        window.removeFile = removeFile;
+    </script>
+</body>
+</html>

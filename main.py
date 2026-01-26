@@ -1,7 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import date
 import json
 
@@ -1111,10 +1111,10 @@ async def upload_file(
 
 @app.post("/api/add-transaction", response_model=InflowEntryCreateResponse, status_code=status.HTTP_201_CREATED)
 async def add_transaction(
+    request: Request,
     company_id: int = Form(...),
     inflow_form_id: int = Form(...),
     payload: str = Form(..., description="JSON string with form data"),
-    files: Optional[List[UploadFile]] = File(default=None, description="Optional file attachments from device"),
     db: Session = Depends(get_db)
 ):
     """
@@ -1136,6 +1136,17 @@ async def add_transaction(
       -F "files=@/path/to/file2.jpg"
     """
     try:
+        # Parse files from form data manually to handle both single and multiple files
+        files_list = []
+        form_data = await request.form()
+        
+        # Get all files with name "files" (can be single or multiple)
+        if "files" in form_data:
+            files_data = form_data.getlist("files")
+            for file_item in files_data:
+                if isinstance(file_item, UploadFile):
+                    files_list.append(file_item)
+        
         # Validate company exists
         company = db.query(Company).filter(Company.id == company_id).first()
         if not company:
@@ -1219,10 +1230,7 @@ async def add_transaction(
                 # Single file URL
                 file_urls_from_payload = [file_upload_data] if file_upload_data.strip() else []
         
-        # Normalize files to list (handle both single file and list)
-        files_list = files if files else []
-        if not isinstance(files_list, list):
-            files_list = [files_list]
+        # files_list is already parsed from form_data above
         
         # Handle files uploaded from device - UPLOAD TO RAILWAY STORAGE
         if files_list:
