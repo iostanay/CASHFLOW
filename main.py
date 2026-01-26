@@ -1163,36 +1163,59 @@ async def add_transaction(
         # Parse files from form data - DEVICE থেকে files upload handle করবে
         files_list = []
         
-        # FastAPI stores files in form_data when using multipart/form-data
-        # Get all files with name "files" (supports multiple files with same field name)
+        print(f"🔍 DEBUG: Starting file parsing...")
+        print(f"🔍 DEBUG: Form data type: {type(form_data)}")
+        print(f"🔍 DEBUG: Form data keys: {list(form_data.keys())}")
+        
         try:
-            # Method 1: Get list of files with name "files"
+            # FastAPI's form_data.getlist() should work for multiple files with same name
             if "files" in form_data:
                 files_data = form_data.getlist("files")
                 print(f"✓ Found 'files' field in form_data, count: {len(files_data)}")
                 
-                for file_item in files_data:
-                    # Check if it's an UploadFile instance (device থেকে uploaded file)
+                for idx, file_item in enumerate(files_data):
+                    print(f"🔍 DEBUG: File item {idx}: type={type(file_item)}")
+                    print(f"🔍 DEBUG: Is UploadFile? {isinstance(file_item, UploadFile)}")
+                    
+                    # Check if it's an UploadFile instance
                     if isinstance(file_item, UploadFile):
-                        if file_item.filename:  # Only add if file has a filename
+                        filename = getattr(file_item, 'filename', None) or getattr(file_item, 'name', None)
+                        print(f"🔍 DEBUG: UploadFile filename: {filename}")
+                        
+                        if filename and str(filename).strip() and filename != 'undefined':
                             files_list.append(file_item)
-                            print(f"  → Added device file: {file_item.filename} ({file_item.size if hasattr(file_item, 'size') else 'unknown'} bytes)")
+                            print(f"  ✓ Added device file: {filename}")
+                        else:
+                            print(f"  ⚠ Skipped file (no valid filename): {file_item}")
+                    else:
+                        # Try to convert or check if it has file-like attributes
+                        print(f"  ⚠ File item is not UploadFile, trying alternative...")
+                        # Sometimes FastAPI wraps it differently
+                        if hasattr(file_item, 'read') or hasattr(file_item, 'filename'):
+                            files_list.append(file_item)
+                            print(f"  ✓ Added file-like object")
             
-            # Method 2: Iterate through all form items to catch files
-            for key, value in form_data.multi_items():
-                if key == "files":
+            # Also check all items in case files are stored differently
+            print(f"🔍 DEBUG: Checking all form items...")
+            for key in form_data.keys():
+                if "file" in key.lower():
+                    value = form_data.get(key)
+                    print(f"🔍 DEBUG: Found file-related key '{key}': type={type(value)}")
                     if isinstance(value, UploadFile) and value not in files_list:
-                        if value.filename:
+                        filename = getattr(value, 'filename', None)
+                        if filename:
                             files_list.append(value)
-                            print(f"  → Added device file from multi_items: {value.filename}")
+                            print(f"  ✓ Added file from key '{key}': {filename}")
         
         except Exception as e:
             print(f"⚠ Error parsing files from device: {str(e)}")
             import traceback
             traceback.print_exc()
-            # Continue without files if parsing fails
         
         print(f"✓ Total files from device ready for Railway Storage upload: {len(files_list)}")
+        if len(files_list) == 0:
+            print(f"⚠ WARNING: No files were parsed! Files might not be in form_data.")
+            print(f"🔍 DEBUG: Try checking request directly or use different parsing method.")
         
         # Validate company exists
         company = db.query(Company).filter(Company.id == company_id).first()
@@ -1280,10 +1303,13 @@ async def add_transaction(
         # files_list is already parsed from form_data above
         
         # Handle files uploaded from device - UPLOAD TO RAILWAY STORAGE
+        print(f"🔍 DEBUG: files_list length: {len(files_list) if files_list else 0}")
         if files_list and len(files_list) > 0:
             print(f"✓ Processing {len(files_list)} file(s) from device for Railway Storage upload...")
             for idx, file in enumerate(files_list):
-                print(f"DEBUG: Processing file {idx + 1}/{len(files_list)}: {file.filename if hasattr(file, 'filename') else 'No filename'}")
+                filename = getattr(file, 'filename', 'No filename')
+                print(f"🔍 DEBUG: Processing file {idx + 1}/{len(files_list)}: {filename}")
+                print(f"🔍 DEBUG: File object: {file}, type: {type(file)}")
                 # Check if file has a filename (file was actually uploaded from device)
                 if hasattr(file, 'filename') and file.filename and file.filename.strip():
                     try:
@@ -1353,12 +1379,32 @@ async def add_transaction(
             InflowEntryAttachment.inflow_entry_id == db_entry.id
         ).all()
         
+        print(f"🔍 DEBUG: Total attachments in database: {len(attachments)}")
+        print(f"🔍 DEBUG: uploaded_files_count: {uploaded_files_count}")
+        print(f"🔍 DEBUG: failed_files: {failed_files}")
+        print(f"🔍 DEBUG: attachment_urls: {attachment_urls}")
+        
         # Build success message
         message = f"Inflow entry created successfully"
         if uploaded_files_count > 0:
             message += f" with {uploaded_files_count} file(s) uploaded to Railway Storage"
         if failed_files:
             message += f". {len(failed_files)} file(s) failed to upload: {', '.join(failed_files[:5])}"  # Limit to first 5
+        if len(files_list) > 0 and uploaded_files_count == 0:
+            message += f". Warning: {len(files_list)} file(s) were received but none were uploaded successfully."
+        
+        # Build attachments list for response
+        attachments_list = []
+        for att in attachments:
+            attachments_list.append({
+                "id": att.id,
+                "inflow_entry_id": att.inflow_entry_id,
+                "file_url": att.file_url,
+                "created_at": att.created_at
+            })
+        
+        print(f"🔍 DEBUG: Response attachments count: {len(attachments_list)}")
+        print(f"🔍 DEBUG: Response attachments: {attachments_list}")
         
         return {
             "success": True,
@@ -1369,15 +1415,7 @@ async def add_transaction(
                 "inflow_form_id": db_entry.inflow_form_id,
                 "payload": db_entry.payload,
                 "created_at": db_entry.created_at,
-                "attachments": [
-                    {
-                        "id": att.id,
-                        "inflow_entry_id": att.inflow_entry_id,
-                        "file_url": att.file_url,
-                        "created_at": att.created_at
-                    }
-                    for att in attachments
-                ]
+                "attachments": attachments_list
             }
         }
     except HTTPException:
