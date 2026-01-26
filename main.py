@@ -1070,16 +1070,23 @@ async def upload_file(
             )
         
         # Upload to Railway Storage
-        file_url = upload_file_to_railway(
-            file_content=file_content,
-            file_name=file.filename or "unnamed_file",
-            folder=folder
-        )
-        
-        if not file_url:
+        try:
+            file_url = upload_file_to_railway(
+                file_content=file_content,
+                file_name=file.filename or "unnamed_file",
+                folder=folder
+            )
+            
+            if not file_url:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to upload file to Railway Storage: No URL returned"
+                )
+        except Exception as upload_error:
+            error_message = str(upload_error)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to upload file to Railway Storage"
+                detail=f"Failed to upload file to Railway Storage: {error_message}"
             )
         
         return {
