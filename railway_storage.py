@@ -182,17 +182,18 @@ def upload_file_to_railway(file_content: bytes, file_name: str, folder: str = "a
         print(f"🔍 Generating presigned URL for: {storage_path}")
         try:
             # Generate presigned URL - this is the ONLY way to access files in private Railway Storage buckets
+            # Railway Storage limit: presigned URLs can only be valid for max 1 week (604800 seconds)
             presigned_url = _railway_s3_client.generate_presigned_url(
                 ClientMethod='get_object',
                 Params={
                     'Bucket': RAILWAY_STORAGE_BUCKET,
                     'Key': storage_path
                 },
-                ExpiresIn=31536000  # 1 year (31536000 seconds = 365 days)
+                ExpiresIn=604800  # 1 week (604800 seconds = 7 days) - Railway Storage maximum
             )
             
             if presigned_url and len(presigned_url) > 0 and presigned_url.startswith('http'):
-                print(f"✓ Successfully generated presigned URL (valid for 1 year)")
+                print(f"✓ Successfully generated presigned URL (valid for 1 week - Railway Storage maximum)")
                 print(f"  URL preview: {presigned_url[:80]}...")
                 return presigned_url
             else:
