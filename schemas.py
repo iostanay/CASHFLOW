@@ -408,6 +408,7 @@ class InflowEntryPayloadCreate(BaseModel):
     company_id: int = Field(..., description="Company ID")
     inflow_form_id: int = Field(..., description="Inflow form ID")
     payload: dict = Field(..., description="JSON payload with form data")
+    files: Optional[List[str]] = Field(default=None, description="Optional list of file URLs (already uploaded to Railway Storage)")
 
     class Config:
         from_attributes = True

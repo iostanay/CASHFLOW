@@ -1335,6 +1335,134 @@ async def add_transaction(
         )
 
 
+# JSON Endpoint for add-transaction (alternative to form-data endpoint)
+
+@app.post("/api/add-transaction-json", response_model=InflowEntryCreateResponse, status_code=status.HTTP_201_CREATED)
+async def add_transaction_json(
+    transaction_data: InflowEntryPayloadCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new inflow entry transaction with file URLs (JSON endpoint)
+    
+    This endpoint accepts JSON body instead of form-data.
+    Use this when files are already uploaded to Railway Storage and you have the URLs.
+    
+    - **company_id**: ID of the company (required)
+    - **inflow_form_id**: ID of the inflow form (required)
+    - **payload**: JSON object with form data (required)
+    - **files**: Optional list of file URLs (already uploaded to Railway Storage)
+    
+    Example:
+    {
+      "company_id": 1,
+      "inflow_form_id": 10,
+      "payload": {
+        "transaction_id": "TXN123",
+        "amount": 5000
+      },
+      "files": [
+        "inflow/1/10/receipt1.pdf",
+        "inflow/1/10/receipt2.jpg"
+      ]
+    }
+    """
+    try:
+        # Validate company exists
+        company = db.query(Company).filter(Company.id == transaction_data.company_id).first()
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with id {transaction_data.company_id} not found"
+            )
+        
+        # Validate inflow form exists
+        inflow_form = db.query(InflowForm).filter(InflowForm.id == transaction_data.inflow_form_id).first()
+        if not inflow_form:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Inflow form with id {transaction_data.inflow_form_id} not found"
+            )
+        
+        # Create inflow entry payload
+        db_entry = InflowEntryPayload(
+            company_id=transaction_data.company_id,
+            inflow_form_id=transaction_data.inflow_form_id,
+            payload=transaction_data.payload
+        )
+        db.add(db_entry)
+        db.flush()  # Flush to get the entry ID without committing
+        
+        # Handle file URLs from request
+        attachment_urls = []
+        uploaded_files_count = 0
+        failed_files = []
+        
+        if transaction_data.files:
+            print(f"Processing {len(transaction_data.files)} file URL(s) from JSON request...")
+            for file_url in transaction_data.files:
+                if file_url and file_url.strip():
+                    try:
+                        # Create attachment record for Railway Storage URL
+                        db_attachment = InflowEntryAttachment(
+                            inflow_entry_id=db_entry.id,
+                            file_url=file_url.strip()
+                        )
+                        db.add(db_attachment)
+                        attachment_urls.append(file_url)
+                        uploaded_files_count += 1
+                        print(f"✓ Added Railway Storage URL to attachments: {file_url}")
+                    except Exception as url_error:
+                        failed_files.append(file_url)
+                        print(f"✗ Error creating attachment for Railway Storage URL {file_url}: {str(url_error)}")
+        
+        # Commit all changes
+        db.commit()
+        db.refresh(db_entry)
+        
+        # Get all attachments for this entry
+        attachments = db.query(InflowEntryAttachment).filter(
+            InflowEntryAttachment.inflow_entry_id == db_entry.id
+        ).all()
+        
+        # Build success message
+        message = f"Inflow entry created successfully"
+        if uploaded_files_count > 0:
+            message += f" with {uploaded_files_count} file URL(s) linked"
+        if failed_files:
+            message += f". {len(failed_files)} file URL(s) failed: {', '.join(failed_files[:5])}"
+        
+        return {
+            "success": True,
+            "message": message,
+            "entry": {
+                "id": db_entry.id,
+                "company_id": db_entry.company_id,
+                "inflow_form_id": db_entry.inflow_form_id,
+                "payload": db_entry.payload,
+                "created_at": db_entry.created_at,
+                "attachments": [
+                    {
+                        "id": att.id,
+                        "inflow_entry_id": att.inflow_entry_id,
+                        "file_url": att.file_url,
+                        "created_at": att.created_at
+                    }
+                    for att in attachments
+                ]
+            }
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating inflow entry: {str(e)}"
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
