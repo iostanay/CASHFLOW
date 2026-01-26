@@ -22,7 +22,7 @@ RAILWAY_STORAGE_ENDPOINT = os.getenv(
 )
 RAILWAY_STORAGE_REGION = os.getenv(
     "RAILWAY_STORAGE_REGION",
-    "auto"
+    "us-east-1"  # Railway Storage typically uses us-east-1
 )
 RAILWAY_STORAGE_BUCKET = os.getenv(
     "RAILWAY_STORAGE_BUCKET",
@@ -34,7 +34,7 @@ RAILWAY_ACCESS_KEY_ID = os.getenv(
 )
 RAILWAY_SECRET_ACCESS_KEY = os.getenv(
     "RAILWAY_SECRET_ACCESS_KEY",
-    "tsec_PzM+nJh6gE1nmSyIvQk77iHnnBRd7iXzc5-zxLddRvfEgf96VDUB6tjYCScHyhkSHAbux1--"
+    "tsec_PzM+nJh6gE1nmSyIvQk77iHnnBRd7iXzc5-zxLddRvfEgf96VDUB6tjYCScHyhkSHAbux1"
 )
 
 # Initialize S3 client for Railway Storage
@@ -43,20 +43,34 @@ _railway_init_error = None
 if BOTO3_AVAILABLE:
     try:
         # Configure S3 client for Railway Storage
+        # Railway Storage uses S3-compatible API
+        # Use path-style addressing and s3v4 signature
         config = Config(
             signature_version='s3v4',
             s3={
                 'addressing_style': 'path'
             }
         )
+        
+        # Create client - Railway Storage S3-compatible API
+        # Note: Make sure credentials don't have extra whitespace
+        access_key = RAILWAY_ACCESS_KEY_ID.strip()
+        secret_key = RAILWAY_SECRET_ACCESS_KEY.strip()
+        
+        # Debug: Print first/last chars of keys (for verification, not full keys)
+        print(f"Initializing Railway Storage client...")
+        print(f"  Access Key ID: {access_key[:10]}...{access_key[-10:]}")
+        print(f"  Secret Key: {secret_key[:10]}...{secret_key[-10:]}")
+        
         _railway_s3_client = boto3.client(
             's3',
             endpoint_url=RAILWAY_STORAGE_ENDPOINT,
             region_name=RAILWAY_STORAGE_REGION,
-            aws_access_key_id=RAILWAY_ACCESS_KEY_ID,
-            aws_secret_access_key=RAILWAY_SECRET_ACCESS_KEY,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
             config=config
         )
+        
         # Test connection by listing buckets (optional check)
         print(f"Railway Storage S3 client initialized successfully")
         print(f"  Endpoint: {RAILWAY_STORAGE_ENDPOINT}")
