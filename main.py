@@ -1152,13 +1152,45 @@ async def add_transaction(
                 detail=f"Inflow form with id {inflow_form_id} not found"
             )
         
-        # Parse JSON payload
+        # Parse JSON payload - handle both string and already parsed JSON
         try:
-            payload_dict = json.loads(payload)
+            # If payload is already a dict (shouldn't happen with Form, but handle it)
+            if isinstance(payload, dict):
+                payload_dict = payload
+            elif isinstance(payload, str):
+                # Strip whitespace and try to parse as JSON string
+                payload = payload.strip()
+                if not payload:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Payload cannot be empty"
+                    )
+                # Try to parse as JSON string
+                payload_dict = json.loads(payload)
+            else:
+                # Try to convert to dict
+                payload_dict = dict(payload) if hasattr(payload, '__dict__') else {"data": payload}
         except json.JSONDecodeError as e:
+            error_detail = f"Invalid JSON payload: {str(e)}"
+            if "Expecting value" in str(e) or "Invalid" in str(e):
+                error_detail += f". Received: {payload[:100]}..." if len(payload) > 100 else f". Received: {payload}"
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid JSON payload: {str(e)}"
+                detail=error_detail
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Error parsing payload: {str(e)}"
+            )
+        
+        # Validate payload is a dict/object (not a list or primitive)
+        if not isinstance(payload_dict, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Payload must be a JSON object/dict, got {type(payload_dict).__name__}. Example: {{\"key\": \"value\"}}"
             )
         
         # Create inflow entry payload
@@ -1176,49 +1208,85 @@ async def add_transaction(
         uploaded_files_count = 0
         failed_files = []
         
+        # Also check if file_upload URLs are provided in the payload
+        file_urls_from_payload = []
+        if isinstance(payload_dict, dict) and "file_upload" in payload_dict:
+            file_upload_data = payload_dict.get("file_upload")
+            if isinstance(file_upload_data, list):
+                # Extract file URLs from payload
+                file_urls_from_payload = [url for url in file_upload_data if isinstance(url, str) and url.strip()]
+            elif isinstance(file_upload_data, str):
+                # Single file URL
+                file_urls_from_payload = [file_upload_data] if file_upload_data.strip() else []
+        
         # Normalize files to list (handle both single file and list)
         files_list = files if files else []
         if not isinstance(files_list, list):
             files_list = [files_list]
         
+        # Handle files uploaded from device - UPLOAD TO RAILWAY STORAGE
         if files_list:
+            print(f"Processing {len(files_list)} file(s) from device for Railway Storage upload...")
             for file in files_list:
                 # Check if file has a filename (file was actually uploaded)
                 if file.filename and file.filename.strip():
                     try:
                         # Read file content from device
                         file_content = await file.read()
+                        file_size = len(file_content)
                         
-                        if file_content and len(file_content) > 0:
-                            # Upload to Railway Storage
+                        if file_content and file_size > 0:
+                            print(f"Uploading file from device to Railway Storage: {file.filename} ({file_size} bytes)")
+                            
+                            # Upload to Railway Storage - DEVICE FILE TO RAILWAY
                             file_url = upload_file_to_railway(
                                 file_content=file_content,
                                 file_name=file.filename,
-                                folder="inflow_attachments"
+                                folder=f"inflow/{company_id}/{inflow_form_id}"  # Organized folder structure
                             )
                             
                             if file_url:
-                                # Create attachment record
+                                print(f"✓ Successfully uploaded {file.filename} to Railway Storage: {file_url}")
+                                
+                                # Create attachment record with Railway Storage URL
                                 db_attachment = InflowEntryAttachment(
                                     inflow_entry_id=db_entry.id,
-                                    file_url=file_url
+                                    file_url=file_url  # Railway Storage URL stored here
                                 )
                                 db.add(db_attachment)
                                 attachment_urls.append(file_url)
                                 uploaded_files_count += 1
                             else:
                                 failed_files.append(file.filename)
-                                print(f"Warning: Failed to upload file {file.filename} - no URL returned")
+                                print(f"✗ Failed to upload file {file.filename} to Railway Storage - no URL returned")
                         else:
                             failed_files.append(file.filename)
-                            print(f"Warning: File {file.filename} is empty")
+                            print(f"✗ File {file.filename} is empty (0 bytes)")
                     except Exception as upload_error:
                         failed_files.append(file.filename)
                         error_msg = str(upload_error)
-                        print(f"Error uploading file {file.filename}: {error_msg}")
+                        print(f"✗ Error uploading file {file.filename} to Railway Storage: {error_msg}")
                         # Continue with other files even if one fails
                 else:
                     print(f"Warning: Skipping file with no filename")
+        
+        # Handle file URLs from payload (already uploaded files - these are already Railway Storage URLs)
+        if file_urls_from_payload:
+            print(f"Processing {len(file_urls_from_payload)} file URL(s) from payload (already in Railway Storage)...")
+            for file_url in file_urls_from_payload:
+                try:
+                    # Create attachment record for already uploaded Railway Storage URL
+                    db_attachment = InflowEntryAttachment(
+                        inflow_entry_id=db_entry.id,
+                        file_url=file_url  # Railway Storage URL from payload
+                    )
+                    db.add(db_attachment)
+                    attachment_urls.append(file_url)
+                    uploaded_files_count += 1
+                    print(f"✓ Added Railway Storage URL to attachments: {file_url}")
+                except Exception as url_error:
+                    failed_files.append(file_url)
+                    print(f"✗ Error creating attachment for Railway Storage URL {file_url}: {str(url_error)}")
         
         # Commit all changes
         db.commit()
@@ -1232,9 +1300,9 @@ async def add_transaction(
         # Build success message
         message = f"Inflow entry created successfully"
         if uploaded_files_count > 0:
-            message += f" with {uploaded_files_count} file(s) uploaded from device"
+            message += f" with {uploaded_files_count} file(s) uploaded to Railway Storage"
         if failed_files:
-            message += f". {len(failed_files)} file(s) failed to upload: {', '.join(failed_files)}"
+            message += f". {len(failed_files)} file(s) failed to upload: {', '.join(failed_files[:5])}"  # Limit to first 5
         
         return {
             "success": True,
