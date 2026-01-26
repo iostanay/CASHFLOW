@@ -242,3 +242,32 @@ class InflowFormField(Base):
     __table_args__ = (
         UniqueConstraint('inflow_form_id', 'field_key', name='uk_form_field'),
     )
+
+
+# --- Inflow Entry Payloads and Attachments ---
+
+class InflowEntryPayload(Base):
+    __tablename__ = "inflow_entry_payloads"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    inflow_form_id = Column(BigInteger, ForeignKey("inflow_forms.id", ondelete="CASCADE"), nullable=False)
+    payload = Column(JSON, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+
+    # Relationships
+    company = relationship("Company")
+    inflow_form = relationship("InflowForm")
+    attachments = relationship("InflowEntryAttachment", back_populates="inflow_entry", cascade="all, delete-orphan")
+
+
+class InflowEntryAttachment(Base):
+    __tablename__ = "inflow_entry_attachments"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    inflow_entry_id = Column(BigInteger, ForeignKey("inflow_entry_payloads.id", ondelete="CASCADE"), nullable=False)
+    file_url = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+
+    # Relationship
+    inflow_entry = relationship("InflowEntryPayload", back_populates="attachments")

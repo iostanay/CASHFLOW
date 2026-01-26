@@ -3,12 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
+import json
 
 from database import get_db, engine
 from models import (
     Base, CustomerReceipt, BankLoanReceipt, VendorPayment, EmployeePayment,
     InflowReceiptMaster, Company, CompanyBankAccount,
     InflowForm, InflowFormField,
+    InflowEntryPayload, InflowEntryAttachment,
 )
 from schemas import (
     CustomerReceiptCreate, CustomerReceiptResponse, 
@@ -22,6 +24,7 @@ from schemas import (
     InflowFormCreateWithFields, InflowFormCreate, InflowFormUpdate, InflowFormResponse, InflowFormWithFieldsResponse, InflowFormSourceResponse,
     InflowFormFieldCreate, InflowFormFieldUpdate, InflowFormFieldResponse, CustomFieldResponse,
     FileUploadResponse,
+    InflowEntryPayloadCreate, InflowEntryPayloadResponse, InflowEntryCreateResponse,
 )
 from firebase_storage import upload_file_to_firebase
 from railway_storage import upload_file_to_railway
@@ -1101,6 +1104,135 @@ async def upload_file(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error uploading file: {str(e)}"
+        )
+
+
+# Inflow Entry Transaction Endpoint
+
+@app.post("/api/add-transaction", response_model=InflowEntryCreateResponse, status_code=status.HTTP_201_CREATED)
+async def add_transaction(
+    company_id: int = Form(...),
+    inflow_form_id: int = Form(...),
+    payload: str = Form(..., description="JSON string with form data"),
+    files: Optional[List[UploadFile]] = File(default=None, description="Optional file attachments"),
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new inflow entry transaction with optional file attachments
+    
+    - **company_id**: ID of the company (required)
+    - **inflow_form_id**: ID of the inflow form (required)
+    - **payload**: JSON string containing the form data (required)
+    - **files**: Optional list of files to upload as attachments
+    
+    Returns the created entry with all attachments
+    """
+    try:
+        # Validate company exists
+        company = db.query(Company).filter(Company.id == company_id).first()
+        if not company:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Company with id {company_id} not found"
+            )
+        
+        # Validate inflow form exists
+        inflow_form = db.query(InflowForm).filter(InflowForm.id == inflow_form_id).first()
+        if not inflow_form:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Inflow form with id {inflow_form_id} not found"
+            )
+        
+        # Parse JSON payload
+        try:
+            payload_dict = json.loads(payload)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid JSON payload: {str(e)}"
+            )
+        
+        # Create inflow entry payload
+        db_entry = InflowEntryPayload(
+            company_id=company_id,
+            inflow_form_id=inflow_form_id,
+            payload=payload_dict
+        )
+        db.add(db_entry)
+        db.flush()  # Flush to get the entry ID without committing
+        
+        # Handle file uploads if provided
+        attachment_urls = []
+        if files:
+            for file in files:
+                if file.filename:
+                    try:
+                        # Read file content
+                        file_content = await file.read()
+                        
+                        if file_content:
+                            # Upload to Railway Storage
+                            file_url = upload_file_to_railway(
+                                file_content=file_content,
+                                file_name=file.filename,
+                                folder="inflow_attachments"
+                            )
+                            
+                            if file_url:
+                                # Create attachment record
+                                db_attachment = InflowEntryAttachment(
+                                    inflow_entry_id=db_entry.id,
+                                    file_url=file_url
+                                )
+                                db.add(db_attachment)
+                                attachment_urls.append(file_url)
+                            else:
+                                print(f"Warning: Failed to upload file {file.filename}")
+                        else:
+                            print(f"Warning: File {file.filename} is empty")
+                    except Exception as upload_error:
+                        print(f"Error uploading file {file.filename}: {str(upload_error)}")
+                        # Continue with other files even if one fails
+        
+        # Commit all changes
+        db.commit()
+        db.refresh(db_entry)
+        
+        # Refresh attachments
+        db.refresh(db_entry)
+        attachments = db.query(InflowEntryAttachment).filter(
+            InflowEntryAttachment.inflow_entry_id == db_entry.id
+        ).all()
+        
+        return {
+            "success": True,
+            "message": f"Inflow entry created successfully with {len(attachments)} attachment(s)",
+            "entry": {
+                "id": db_entry.id,
+                "company_id": db_entry.company_id,
+                "inflow_form_id": db_entry.inflow_form_id,
+                "payload": db_entry.payload,
+                "created_at": db_entry.created_at,
+                "attachments": [
+                    {
+                        "id": att.id,
+                        "inflow_entry_id": att.inflow_entry_id,
+                        "file_url": att.file_url,
+                        "created_at": att.created_at
+                    }
+                    for att in attachments
+                ]
+            }
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error creating inflow entry: {str(e)}"
         )
 
 

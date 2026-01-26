@@ -388,3 +388,46 @@ class FileUploadResponse(BaseModel):
     message: str
     file_url: Optional[str] = None
     file_name: Optional[str] = None
+
+
+# --- Inflow Entry Schemas ---
+
+class InflowEntryAttachmentResponse(BaseModel):
+    """Response model for inflow entry attachment"""
+    id: int
+    inflow_entry_id: int
+    file_url: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InflowEntryPayloadCreate(BaseModel):
+    """Schema for creating inflow entry payload"""
+    company_id: int = Field(..., description="Company ID")
+    inflow_form_id: int = Field(..., description="Inflow form ID")
+    payload: dict = Field(..., description="JSON payload with form data")
+
+    class Config:
+        from_attributes = True
+
+
+class InflowEntryPayloadResponse(BaseModel):
+    """Response model for inflow entry payload"""
+    id: int
+    company_id: int
+    inflow_form_id: int
+    payload: dict
+    created_at: datetime
+    attachments: List[InflowEntryAttachmentResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class InflowEntryCreateResponse(BaseModel):
+    """Response model for creating inflow entry with attachments"""
+    success: bool
+    message: str
+    entry: InflowEntryPayloadResponse
