@@ -1112,17 +1112,14 @@ async def upload_file(
 @app.post("/api/add-transaction", response_model=InflowEntryCreateResponse, status_code=status.HTTP_201_CREATED)
 async def add_transaction(
     request: Request,
-    company_id: int = Form(...),
-    inflow_form_id: int = Form(...),
-    payload: str = Form(..., description="JSON string with form data"),
     db: Session = Depends(get_db)
 ):
     """
     Create a new inflow entry transaction with optional file attachments from device
     
-    - **company_id**: ID of the company (required)
-    - **inflow_form_id**: ID of the inflow form (required)
-    - **payload**: JSON string containing the form data (required)
+    - **company_id**: ID of the company (required, form field)
+    - **inflow_form_id**: ID of the inflow form (required, form field)
+    - **payload**: JSON string containing the form data (required, form field)
     - **files**: Optional list of files to upload as attachments (can upload multiple files from device)
     
     Returns the created entry with all attachments
@@ -1136,11 +1133,35 @@ async def add_transaction(
       -F "files=@/path/to/file2.jpg"
     """
     try:
-        # Parse files from form data manually to handle both single and multiple files
-        files_list = []
+        # Parse all form data manually to avoid FastAPI validation issues with files
         form_data = await request.form()
         
-        # Get all files with name "files" (can be single or multiple)
+        # Extract form fields
+        try:
+            company_id = int(form_data.get("company_id"))
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="company_id is required and must be a valid integer"
+            )
+        
+        try:
+            inflow_form_id = int(form_data.get("inflow_form_id"))
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="inflow_form_id is required and must be a valid integer"
+            )
+        
+        payload = form_data.get("payload")
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="payload is required"
+            )
+        
+        # Parse files from form data - handle both single and multiple files
+        files_list = []
         if "files" in form_data:
             files_data = form_data.getlist("files")
             for file_item in files_data:
