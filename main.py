@@ -785,6 +785,7 @@ def create_inflow_form_with_fields(payload: InflowFormCreateWithFields, db: Sess
             id=db_form.id,
             flow_type=_val(db_form.flow_type),
             mode=_val(db_form.mode),
+            attachment=_val(db_form.attachment),
             source=db_form.source,
             created_at=db_form.created_at,
             updated_at=db_form.updated_at,

@@ -272,6 +272,12 @@ class InflowFormCreateWithFields(BaseModel):
     flow_type: FlowTypeEnum = Field(..., description="INFLOW or OUTFLOW")
     mode: InflowModeEnum = Field(..., description="BANK, CASH, or UPI")
     source: str = Field(..., max_length=150, description="Source")
+    attachment: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+        description="0 = no attachment, 1 = attachment enabled"
+    )
     custom_fields: List[CustomFieldCreate] = Field(default=[], description="List of custom fields")
 
     class Config:

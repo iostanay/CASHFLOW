@@ -215,7 +215,7 @@ class InflowForm(Base):
     flow_type = Column(Enum(FlowTypeEnum, native_enum=False, length=20), nullable=False)
     mode = Column(Enum(InflowModeEnum, native_enum=False, length=20), nullable=False)
     source = Column(String(150), nullable=False)
-
+    attachment = Column(Integer, nullable=False, default=0)
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
