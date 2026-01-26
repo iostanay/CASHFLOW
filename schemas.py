@@ -380,3 +380,11 @@ class InflowFormWithFieldsResponse(InflowFormResponse):
 
     class Config:
         from_attributes = True
+
+
+class FileUploadResponse(BaseModel):
+    """Response model for file upload"""
+    success: bool
+    message: str
+    file_url: Optional[str] = None
+    file_name: Optional[str] = None

@@ -21,8 +21,10 @@ from schemas import (
     CompanyWithBankAccounts, CompanyCreateResponse,
     InflowFormCreateWithFields, InflowFormCreate, InflowFormUpdate, InflowFormResponse, InflowFormWithFieldsResponse, InflowFormSourceResponse,
     InflowFormFieldCreate, InflowFormFieldUpdate, InflowFormFieldResponse, CustomFieldResponse,
+    FileUploadResponse,
 )
 from firebase_storage import upload_file_to_firebase
+from railway_storage import upload_file_to_railway
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -1039,6 +1041,59 @@ def delete_inflow_form_field(field_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Error deleting inflow form field: {str(e)}"
+        )
+
+
+# File Upload Endpoint
+
+@app.post("/api/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
+async def upload_file(
+    file: UploadFile = File(...),
+    folder: Optional[str] = Form(default="attachments", description="Folder path in Railway Storage")
+):
+    """
+    Upload a file to Railway Storage
+    
+    - **file**: The file to upload (required)
+    - **folder**: Optional folder path in Railway Storage (default: "attachments")
+    
+    Returns the public URL of the uploaded file
+    """
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        if not file_content:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File is empty"
+            )
+        
+        # Upload to Railway Storage
+        file_url = upload_file_to_railway(
+            file_content=file_content,
+            file_name=file.filename or "unnamed_file",
+            folder=folder
+        )
+        
+        if not file_url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to upload file to Railway Storage"
+            )
+        
+        return {
+            "success": True,
+            "message": "File uploaded successfully",
+            "file_url": file_url,
+            "file_name": file.filename
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error uploading file: {str(e)}"
         )
 
 
