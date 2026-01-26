@@ -1160,13 +1160,39 @@ async def add_transaction(
                 detail="payload is required"
             )
         
-        # Parse files from form data - handle both single and multiple files
+        # Parse files from form data - DEVICE থেকে files upload handle করবে
         files_list = []
-        if "files" in form_data:
-            files_data = form_data.getlist("files")
-            for file_item in files_data:
-                if isinstance(file_item, UploadFile):
-                    files_list.append(file_item)
+        
+        # FastAPI stores files in form_data when using multipart/form-data
+        # Get all files with name "files" (supports multiple files with same field name)
+        try:
+            # Method 1: Get list of files with name "files"
+            if "files" in form_data:
+                files_data = form_data.getlist("files")
+                print(f"✓ Found 'files' field in form_data, count: {len(files_data)}")
+                
+                for file_item in files_data:
+                    # Check if it's an UploadFile instance (device থেকে uploaded file)
+                    if isinstance(file_item, UploadFile):
+                        if file_item.filename:  # Only add if file has a filename
+                            files_list.append(file_item)
+                            print(f"  → Added device file: {file_item.filename} ({file_item.size if hasattr(file_item, 'size') else 'unknown'} bytes)")
+            
+            # Method 2: Iterate through all form items to catch files
+            for key, value in form_data.multi_items():
+                if key == "files":
+                    if isinstance(value, UploadFile) and value not in files_list:
+                        if value.filename:
+                            files_list.append(value)
+                            print(f"  → Added device file from multi_items: {value.filename}")
+        
+        except Exception as e:
+            print(f"⚠ Error parsing files from device: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            # Continue without files if parsing fails
+        
+        print(f"✓ Total files from device ready for Railway Storage upload: {len(files_list)}")
         
         # Validate company exists
         company = db.query(Company).filter(Company.id == company_id).first()
@@ -1254,11 +1280,12 @@ async def add_transaction(
         # files_list is already parsed from form_data above
         
         # Handle files uploaded from device - UPLOAD TO RAILWAY STORAGE
-        if files_list:
-            print(f"Processing {len(files_list)} file(s) from device for Railway Storage upload...")
-            for file in files_list:
-                # Check if file has a filename (file was actually uploaded)
-                if file.filename and file.filename.strip():
+        if files_list and len(files_list) > 0:
+            print(f"✓ Processing {len(files_list)} file(s) from device for Railway Storage upload...")
+            for idx, file in enumerate(files_list):
+                print(f"DEBUG: Processing file {idx + 1}/{len(files_list)}: {file.filename if hasattr(file, 'filename') else 'No filename'}")
+                # Check if file has a filename (file was actually uploaded from device)
+                if hasattr(file, 'filename') and file.filename and file.filename.strip():
                     try:
                         # Read file content from device
                         file_content = await file.read()
