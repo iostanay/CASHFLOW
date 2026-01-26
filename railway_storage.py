@@ -128,7 +128,8 @@ def upload_file_to_railway(file_content: bytes, file_name: str, folder: str = "a
             content_type = 'text/plain'
         
         # Upload file to Railway Storage
-        # Note: Railway Storage might not support ACL, so we'll try without it first
+        # Try to upload with public-read ACL first
+        acl_success = False
         try:
             _railway_s3_client.put_object(
                 Bucket=RAILWAY_STORAGE_BUCKET,
@@ -137,34 +138,61 @@ def upload_file_to_railway(file_content: bytes, file_name: str, folder: str = "a
                 ContentType=content_type,
                 ACL='public-read'  # Try with ACL first
             )
+            acl_success = True
+            print(f"✓ File uploaded with public-read ACL")
         except ClientError as acl_error:
-            # If ACL fails, try without ACL (Railway Storage might handle public access differently)
+            # If ACL fails, try without ACL
             error_code = acl_error.response.get('Error', {}).get('Code', '')
-            if error_code in ['InvalidArgument', 'NotImplemented', 'AccessDenied']:
-                print(f"ACL not supported, trying without ACL: {str(acl_error)}")
+            if error_code in ['InvalidArgument', 'NotImplemented', 'AccessDenied', 'AccessControlListNotSupported']:
+                print(f"ACL not supported in put_object, uploading without ACL: {str(acl_error)}")
                 _railway_s3_client.put_object(
                     Bucket=RAILWAY_STORAGE_BUCKET,
                     Key=storage_path,
                     Body=file_content,
                     ContentType=content_type
                 )
+                # Try to set ACL after upload
+                try:
+                    _railway_s3_client.put_object_acl(
+                        Bucket=RAILWAY_STORAGE_BUCKET,
+                        Key=storage_path,
+                        ACL='public-read'
+                    )
+                    acl_success = True
+                    print(f"✓ File uploaded and ACL set to public-read after upload")
+                except ClientError as acl_error2:
+                    print(f"⚠ Could not set ACL to public-read: {str(acl_error2)}")
+                    # Continue - will generate presigned URL instead
             else:
                 raise
-        
-        # Construct public URL
-        # Railway Storage public URL format: https://storage.railway.app/bucket-name/path/to/file
-        # URL encode the storage path to handle special characters
-        encoded_path = quote(storage_path, safe='/')
-        public_url = f"{RAILWAY_STORAGE_ENDPOINT}/{RAILWAY_STORAGE_BUCKET}/{encoded_path}"
         
         # Verify the upload was successful by checking if object exists
         try:
             _railway_s3_client.head_object(Bucket=RAILWAY_STORAGE_BUCKET, Key=storage_path)
+            print(f"✓ File verified in Railway Storage")
         except ClientError as verify_error:
             print(f"Warning: Upload completed but verification failed: {str(verify_error)}")
             # Still return URL as upload might have succeeded
         
-        return public_url
+        # Construct URL - Railway Storage might need presigned URLs for access
+        encoded_path = quote(storage_path, safe='/')
+        
+        # Always generate presigned URL for reliable access (valid for 1 year)
+        # Railway Storage might not support public bucket access, so presigned URLs are more reliable
+        try:
+            presigned_url = _railway_s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': RAILWAY_STORAGE_BUCKET, 'Key': storage_path},
+                ExpiresIn=31536000  # 1 year (31536000 seconds)
+            )
+            print(f"✓ Generated presigned URL (valid for 1 year): {presigned_url[:80]}...")
+            return presigned_url
+        except Exception as presign_error:
+            print(f"⚠ Could not generate presigned URL: {str(presign_error)}")
+            # Fallback to public URL format (might not work if bucket is private)
+            public_url = f"{RAILWAY_STORAGE_ENDPOINT}/{RAILWAY_STORAGE_BUCKET}/{encoded_path}"
+            print(f"⚠ Using public URL format (may require bucket to be public): {public_url}")
+            return public_url
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', 'Unknown')
         error_message = e.response.get('Error', {}).get('Message', str(e))
