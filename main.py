@@ -1114,18 +1114,26 @@ async def add_transaction(
     company_id: int = Form(...),
     inflow_form_id: int = Form(...),
     payload: str = Form(..., description="JSON string with form data"),
-    files: Optional[List[UploadFile]] = File(default=None, description="Optional file attachments"),
+    files: Optional[List[UploadFile]] = File(default=None, description="Optional file attachments from device"),
     db: Session = Depends(get_db)
 ):
     """
-    Create a new inflow entry transaction with optional file attachments
+    Create a new inflow entry transaction with optional file attachments from device
     
     - **company_id**: ID of the company (required)
     - **inflow_form_id**: ID of the inflow form (required)
     - **payload**: JSON string containing the form data (required)
-    - **files**: Optional list of files to upload as attachments
+    - **files**: Optional list of files to upload as attachments (can upload multiple files from device)
     
     Returns the created entry with all attachments
+    
+    Example usage with curl:
+    curl -X POST "http://localhost:8000/api/add-transaction" \\
+      -F "company_id=1" \\
+      -F "inflow_form_id=1" \\
+      -F "payload={\\"amount\\": 1000}" \\
+      -F "files=@/path/to/file1.pdf" \\
+      -F "files=@/path/to/file2.jpg"
     """
     try:
         # Validate company exists
@@ -1162,16 +1170,26 @@ async def add_transaction(
         db.add(db_entry)
         db.flush()  # Flush to get the entry ID without committing
         
-        # Handle file uploads if provided
+        # Handle file uploads from device if provided
+        # Support both single file and multiple files
         attachment_urls = []
-        if files:
-            for file in files:
-                if file.filename:
+        uploaded_files_count = 0
+        failed_files = []
+        
+        # Normalize files to list (handle both single file and list)
+        files_list = files if files else []
+        if not isinstance(files_list, list):
+            files_list = [files_list]
+        
+        if files_list:
+            for file in files_list:
+                # Check if file has a filename (file was actually uploaded)
+                if file.filename and file.filename.strip():
                     try:
-                        # Read file content
+                        # Read file content from device
                         file_content = await file.read()
                         
-                        if file_content:
+                        if file_content and len(file_content) > 0:
                             # Upload to Railway Storage
                             file_url = upload_file_to_railway(
                                 file_content=file_content,
@@ -1187,27 +1205,40 @@ async def add_transaction(
                                 )
                                 db.add(db_attachment)
                                 attachment_urls.append(file_url)
+                                uploaded_files_count += 1
                             else:
-                                print(f"Warning: Failed to upload file {file.filename}")
+                                failed_files.append(file.filename)
+                                print(f"Warning: Failed to upload file {file.filename} - no URL returned")
                         else:
+                            failed_files.append(file.filename)
                             print(f"Warning: File {file.filename} is empty")
                     except Exception as upload_error:
-                        print(f"Error uploading file {file.filename}: {str(upload_error)}")
+                        failed_files.append(file.filename)
+                        error_msg = str(upload_error)
+                        print(f"Error uploading file {file.filename}: {error_msg}")
                         # Continue with other files even if one fails
+                else:
+                    print(f"Warning: Skipping file with no filename")
         
         # Commit all changes
         db.commit()
         db.refresh(db_entry)
         
-        # Refresh attachments
-        db.refresh(db_entry)
+        # Get all attachments for this entry
         attachments = db.query(InflowEntryAttachment).filter(
             InflowEntryAttachment.inflow_entry_id == db_entry.id
         ).all()
         
+        # Build success message
+        message = f"Inflow entry created successfully"
+        if uploaded_files_count > 0:
+            message += f" with {uploaded_files_count} file(s) uploaded from device"
+        if failed_files:
+            message += f". {len(failed_files)} file(s) failed to upload: {', '.join(failed_files)}"
+        
         return {
             "success": True,
-            "message": f"Inflow entry created successfully with {len(attachments)} attachment(s)",
+            "message": message,
             "entry": {
                 "id": db_entry.id,
                 "company_id": db_entry.company_id,
