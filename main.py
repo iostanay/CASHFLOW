@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 from typing import List, Optional, Union
 from datetime import date
 import json
@@ -23,11 +24,11 @@ from schemas import (
     CompanyWithBankAccounts, CompanyCreateResponse,
     InflowFormCreateWithFields, InflowFormCreate, InflowFormUpdate, InflowFormResponse, InflowFormWithFieldsResponse, InflowFormSourceResponse,
     InflowFormFieldCreate, InflowFormFieldUpdate, InflowFormFieldResponse, CustomFieldResponse,
-    FileUploadResponse,
+    FileUploadResponse, PresignedUrlResponse,
     InflowEntryPayloadCreate, InflowEntryPayloadResponse, InflowEntryCreateResponse,
 )
 from firebase_storage import upload_file_to_firebase
-from railway_storage import upload_file_to_railway
+from railway_storage import upload_file_to_railway, regenerate_presigned_url, generate_presigned_url_from_path
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -1554,6 +1555,302 @@ async def add_transaction_json(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating inflow entry: {str(e)}"
+        )
+
+
+# Presigned URL Regeneration Endpoint
+
+@app.post("/api/regenerate-presigned-url", response_model=PresignedUrlResponse, status_code=status.HTTP_200_OK)
+async def regenerate_presigned_url_endpoint(
+    file_url: str = Form(..., description="Existing Railway Storage URL (can be expired)"),
+    db: Session = Depends(get_db)
+):
+    """
+    Regenerate presigned URL for an expired or existing Railway Storage file URL
+    
+    - **file_url**: Existing Railway Storage URL (can be expired presigned URL or direct URL)
+    
+    Returns a new presigned URL valid for 1 week (Railway Storage maximum)
+    
+    This endpoint is useful when:
+    - Presigned URLs have expired (they expire after 1 week)
+    - You need a fresh presigned URL for file access
+    - You have a direct URL that needs to be converted to presigned URL
+    """
+    try:
+        if not file_url or not file_url.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="file_url is required"
+            )
+        
+        print(f"🔄 Regenerating presigned URL for: {file_url[:100]}...")
+        
+        # Regenerate presigned URL
+        new_presigned_url = regenerate_presigned_url(file_url.strip())
+        
+        if not new_presigned_url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate presigned URL. Check if the file exists in Railway Storage."
+            )
+        
+        return {
+            "success": True,
+            "message": "Presigned URL generated successfully (valid for 1 week)",
+            "file_url": new_presigned_url,
+            "expires_in_seconds": 604800  # 1 week
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error regenerating presigned URL: {str(e)}"
+        )
+
+
+@app.post("/api/regenerate-attachment-url/{attachment_id}", response_model=PresignedUrlResponse, status_code=status.HTTP_200_OK)
+async def regenerate_attachment_url(
+    attachment_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Regenerate presigned URL for an attachment by ID and update database
+    
+    - **attachment_id**: ID of the attachment in database
+    
+    Returns a new presigned URL and updates the attachment record in database
+    """
+    try:
+        # Get attachment from database
+        attachment = db.query(InflowEntryAttachment).filter(
+            InflowEntryAttachment.id == attachment_id
+        ).first()
+        
+        if not attachment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Attachment with id {attachment_id} not found"
+            )
+        
+        if not attachment.file_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Attachment has no file URL"
+            )
+        
+        print(f"🔄 Regenerating presigned URL for attachment {attachment_id}: {attachment.file_url[:100]}...")
+        
+        # Regenerate presigned URL
+        new_presigned_url = regenerate_presigned_url(attachment.file_url)
+        
+        if not new_presigned_url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate presigned URL. Check if the file exists in Railway Storage."
+            )
+        
+        # Update attachment with new URL
+        attachment.file_url = new_presigned_url
+        db.commit()
+        db.refresh(attachment)
+        
+        return {
+            "success": True,
+            "message": f"Presigned URL regenerated and updated for attachment {attachment_id} (valid for 1 week)",
+            "file_url": new_presigned_url,
+            "expires_in_seconds": 604800  # 1 week
+        }
+        
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error regenerating attachment URL: {str(e)}"
+        )
+
+
+# List Inflow Entries with Filters
+
+@app.get("/api/inflow-entries", response_model=List[InflowEntryPayloadResponse], status_code=status.HTTP_200_OK)
+async def list_inflow_entries(
+    company_id: Optional[int] = None,
+    inflow_form_id: Optional[int] = None,
+    mode: Optional[str] = None,  # mode from payload
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List inflow entries with optional filters
+    
+    - **company_id**: Filter by company ID (optional)
+    - **inflow_form_id**: Filter by inflow form ID (optional)
+    - **mode**: Filter by mode from payload JSON (optional, e.g., "BANK", "CASH", "UPI")
+    - **skip**: Number of records to skip (for pagination)
+    - **limit**: Maximum number of records to return
+    
+    Returns list of inflow entries with their attachments
+    """
+    try:
+        # Start with base query
+        query = db.query(InflowEntryPayload)
+        
+        # Apply filters
+        if company_id is not None:
+            query = query.filter(InflowEntryPayload.company_id == company_id)
+        
+        if inflow_form_id is not None:
+            query = query.filter(InflowEntryPayload.inflow_form_id == inflow_form_id)
+        
+        # Filter by mode in payload (JSON field)
+        if mode:
+            # MySQL JSON field query - check if payload contains mode
+            # For MySQL, we need to use JSON_EXTRACT or cast to text
+            # Try different approaches based on database type
+            try:
+                # Method 1: Direct JSON key access (works with SQLAlchemy JSON type)
+                query = query.filter(
+                    InflowEntryPayload.payload['mode'].astext == mode
+                )
+            except:
+                # Method 2: Use JSON_EXTRACT for MySQL
+                # This is a fallback if the above doesn't work
+                from sqlalchemy import text
+                query = query.filter(
+                    text(f"JSON_EXTRACT(payload, '$.mode') = :mode")
+                ).params(mode=mode)
+        
+        # Get total count before pagination
+        total_count = query.count()
+        
+        # Apply pagination and ordering
+        entries = query.order_by(InflowEntryPayload.created_at.desc()).offset(skip).limit(limit).all()
+        
+        # Get attachments for each entry
+        result = []
+        for entry in entries:
+            # Get attachments for this entry
+            attachments = db.query(InflowEntryAttachment).filter(
+                InflowEntryAttachment.inflow_entry_id == entry.id
+            ).all()
+            
+            # Build response
+            entry_data = {
+                "id": entry.id,
+                "company_id": entry.company_id,
+                "inflow_form_id": entry.inflow_form_id,
+                "payload": entry.payload,
+                "created_at": entry.created_at,
+                "attachments": [
+                    {
+                        "id": att.id,
+                        "inflow_entry_id": att.inflow_entry_id,
+                        "file_url": att.file_url,
+                        "created_at": att.created_at
+                    }
+                    for att in attachments
+                ]
+            }
+            result.append(entry_data)
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching inflow entries: {str(e)}"
+        )
+
+
+# Alternative endpoint with JSON response including metadata
+
+@app.get("/api/inflow-entries-with-meta")
+async def list_inflow_entries_with_meta(
+    company_id: Optional[int] = None,
+    inflow_form_id: Optional[int] = None,
+    mode: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List inflow entries with metadata (total count, pagination info)
+    
+    Same filters as /api/inflow-entries but includes pagination metadata
+    """
+    try:
+        # Start with base query
+        query = db.query(InflowEntryPayload)
+        
+        # Apply filters
+        if company_id is not None:
+            query = query.filter(InflowEntryPayload.company_id == company_id)
+        
+        if inflow_form_id is not None:
+            query = query.filter(InflowEntryPayload.inflow_form_id == inflow_form_id)
+        
+        # Filter by mode in payload (JSON field)
+        if mode:
+            try:
+                # Method 1: Direct JSON key access (works with SQLAlchemy JSON type)
+                query = query.filter(
+                    InflowEntryPayload.payload['mode'].astext == mode
+                )
+            except:
+                # Method 2: Use JSON_EXTRACT for MySQL (fallback)
+                from sqlalchemy import text
+                query = query.filter(
+                    text(f"JSON_EXTRACT(payload, '$.mode') = :mode")
+                ).params(mode=mode)
+        
+        # Get total count
+        total_count = query.count()
+        
+        # Apply pagination and ordering
+        entries = query.order_by(InflowEntryPayload.created_at.desc()).offset(skip).limit(limit).all()
+        
+        # Get attachments for each entry
+        entries_list = []
+        for entry in entries:
+            attachments = db.query(InflowEntryAttachment).filter(
+                InflowEntryAttachment.inflow_entry_id == entry.id
+            ).all()
+            
+            entries_list.append({
+                "id": entry.id,
+                "company_id": entry.company_id,
+                "inflow_form_id": entry.inflow_form_id,
+                "payload": entry.payload,
+                "created_at": entry.created_at,
+                "attachments": [
+                    {
+                        "id": att.id,
+                        "inflow_entry_id": att.inflow_entry_id,
+                        "file_url": att.file_url,
+                        "created_at": att.created_at
+                    }
+                    for att in attachments
+                ]
+            })
+        
+        return {
+            "success": True,
+            "total": total_count,
+            "skip": skip,
+            "limit": limit,
+            "data": entries_list
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching inflow entries: {str(e)}"
         )
 
 

@@ -226,6 +226,117 @@ def upload_file_to_railway(file_content: bytes, file_name: str, folder: str = "a
         raise Exception(error_detail) from e
 
 
+def generate_presigned_url_from_path(storage_path: str) -> Optional[str]:
+    """
+    Generate a presigned URL for an existing file in Railway Storage
+    
+    Args:
+        storage_path: Path to the file in Railway Storage (e.g., "inflow/1/1/file.png")
+        
+    Returns:
+        Presigned URL valid for 1 week or None if generation fails
+    """
+    if not _railway_s3_client:
+        print("Warning: Railway Storage not initialized. Cannot generate presigned URL.")
+        return None
+    
+    try:
+        print(f"🔍 Generating presigned URL for path: {storage_path}")
+        
+        # Generate presigned URL (valid for 1 week - Railway Storage maximum)
+        presigned_url = _railway_s3_client.generate_presigned_url(
+            ClientMethod='get_object',
+            Params={
+                'Bucket': RAILWAY_STORAGE_BUCKET,
+                'Key': storage_path
+            },
+            ExpiresIn=604800  # 1 week (604800 seconds = 7 days) - Railway Storage maximum
+        )
+        
+        if presigned_url and len(presigned_url) > 0 and presigned_url.startswith('http'):
+            print(f"✓ Successfully generated presigned URL (valid for 1 week)")
+            return presigned_url
+        else:
+            print(f"✗ Invalid presigned URL format")
+            return None
+            
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+        error_msg = e.response.get('Error', {}).get('Message', str(e))
+        print(f"✗ Failed to generate presigned URL [{error_code}]: {error_msg}")
+        return None
+    except Exception as e:
+        print(f"✗ Unexpected error generating presigned URL: {str(e)}")
+        return None
+
+
+def extract_storage_path_from_url(file_url: str) -> Optional[str]:
+    """
+    Extract storage path from Railway Storage URL
+    
+    Args:
+        file_url: Full URL or presigned URL from Railway Storage
+        
+    Returns:
+        Storage path (e.g., "inflow/1/1/file.png") or None if extraction fails
+    """
+    try:
+        # Remove query parameters (for presigned URLs)
+        url_without_params = file_url.split('?')[0]
+        
+        # Extract path after bucket name
+        # Format: https://storage.railway.app/bucket-name/path/to/file
+        if RAILWAY_STORAGE_ENDPOINT in url_without_params and RAILWAY_STORAGE_BUCKET in url_without_params:
+            # Remove endpoint and bucket from URL
+            path = url_without_params.replace(f"{RAILWAY_STORAGE_ENDPOINT}/{RAILWAY_STORAGE_BUCKET}/", "")
+            # URL decode the path
+            from urllib.parse import unquote
+            decoded_path = unquote(path)
+            print(f"✓ Extracted storage path: {decoded_path}")
+            return decoded_path
+        
+        # If URL doesn't match expected format, try to extract from common patterns
+        if "/" in url_without_params:
+            parts = url_without_params.split("/")
+            # Look for bucket name and get everything after it
+            if RAILWAY_STORAGE_BUCKET in parts:
+                bucket_index = parts.index(RAILWAY_STORAGE_BUCKET)
+                if bucket_index + 1 < len(parts):
+                    path = "/".join(parts[bucket_index + 1:])
+                    from urllib.parse import unquote
+                    decoded_path = unquote(path)
+                    print(f"✓ Extracted storage path (alternative method): {decoded_path}")
+                    return decoded_path
+        
+        print(f"⚠ Could not extract storage path from URL: {file_url}")
+        return None
+        
+    except Exception as e:
+        print(f"✗ Error extracting storage path from URL: {str(e)}")
+        return None
+
+
+def regenerate_presigned_url(file_url: str) -> Optional[str]:
+    """
+    Regenerate presigned URL from an existing Railway Storage URL (for expired URLs)
+    
+    Args:
+        file_url: Existing Railway Storage URL (can be expired presigned URL or direct URL)
+        
+    Returns:
+        New presigned URL valid for 1 week or None if regeneration fails
+    """
+    # Extract storage path from URL
+    storage_path = extract_storage_path_from_url(file_url)
+    
+    if not storage_path:
+        print(f"✗ Could not extract storage path from URL: {file_url}")
+        return None
+    
+    # Generate new presigned URL
+    return generate_presigned_url_from_path(storage_path)
+
+
 def delete_file_from_railway(file_url: str) -> bool:
     """
     Delete a file from Railway Storage using its URL

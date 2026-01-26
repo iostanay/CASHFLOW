@@ -390,6 +390,14 @@ class FileUploadResponse(BaseModel):
     file_name: Optional[str] = None
 
 
+class PresignedUrlResponse(BaseModel):
+    """Response model for presigned URL regeneration"""
+    success: bool
+    message: str
+    file_url: Optional[str] = None
+    expires_in_seconds: int = 604800  # 1 week
+
+
 # --- Inflow Entry Schemas ---
 
 class InflowEntryAttachmentResponse(BaseModel):
