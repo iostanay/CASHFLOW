@@ -893,6 +893,7 @@ def get_inflow_form(form_id: int, db: Session = Depends(get_db)):
         id=form.id,
         flow_type=_val(form.flow_type),
         mode=_val(form.mode),
+        attachment=bool(_val(form.attachment)),
         source=form.source,
         created_at=form.created_at,
         updated_at=form.updated_at,
