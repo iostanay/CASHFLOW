@@ -1573,22 +1573,47 @@ async def add_transaction_json(
 
 
 # Edit Transaction (Update inflow entry by ID)
+# Supports both JSON body and multipart/form-data (with file upload)
+
+def _merge_edit_payload(entry, current_payload, payload_dict=None, bank_name=None, bank_account_number=None):
+    """Merge payload dict and bank fields into current_payload; update entry.payload."""
+    if payload_dict is not None and isinstance(payload_dict, dict):
+        current_payload.update(payload_dict)
+    if bank_name is not None:
+        current_payload["bank_name"] = bank_name
+    if bank_account_number is not None:
+        current_payload["bank_account_number"] = bank_account_number
+    entry.payload = current_payload
+
 
 @app.put("/api/edit-transaction/{entry_id}", response_model=InflowEntryCreateResponse, status_code=status.HTTP_200_OK)
 async def edit_transaction(
     entry_id: int,
-    update_data: InflowEntryPayloadUpdate,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
     Update an existing inflow entry by ID.
     
-    - **entry_id**: ID of the inflow entry to update (path parameter)
+    **JSON body** (Content-Type: application/json):
     - **payload**: Optional JSON object to merge into existing form data (partial update)
     - **bank_name**: Optional bank name
     - **bank_account_number**: Optional bank account number
     
-    Returns the updated entry with attachments.
+    **Form-data** (Content-Type: multipart/form-data) – supports file upload:
+    - **payload**: Optional JSON string to merge into existing form data
+    - **bank_name**: Optional bank name
+    - **bank_account_number**: Optional bank account number
+    - **files**: Optional list of files to upload as new attachments (multiple allowed)
+    
+    Returns the updated entry with all attachments.
+    
+    Example with files (curl):
+    curl -X PUT "http://localhost:8000/api/edit-transaction/123" \\
+      -F "payload={\\"amount\\": 2000}" \\
+      -F "bank_name=HDFC Bank" \\
+      -F "files=@/path/to/file1.pdf" \\
+      -F "files=@/path/to/file2.jpg"
     """
     try:
         entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == entry_id).first()
@@ -1598,20 +1623,76 @@ async def edit_transaction(
                 detail=f"Inflow entry with id {entry_id} not found"
             )
         
-        # Start with existing payload
         current_payload = dict(entry.payload) if entry.payload else {}
+        content_type = (request.headers.get("content-type") or "").lower()
         
-        # Merge provided payload into existing (shallow merge)
-        if update_data.payload is not None and isinstance(update_data.payload, dict):
-            current_payload.update(update_data.payload)
+        if "multipart/form-data" in content_type:
+            # Form-data: payload (optional JSON string), bank_name, bank_account_number, files
+            form_data = await request.form()
+            
+            payload_dict = None
+            payload_str = form_data.get("payload")
+            if payload_str is not None and str(payload_str).strip():
+                try:
+                    payload_dict = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
+                except json.JSONDecodeError:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON in payload field")
+            
+            bank_name = form_data.get("bank_name")
+            bank_account_number = form_data.get("bank_account_number")
+            if bank_name is not None and str(bank_name).strip() == "":
+                bank_name = None
+            elif bank_name is not None:
+                bank_name = str(bank_name).strip()
+            if bank_account_number is not None and str(bank_account_number).strip() == "":
+                bank_account_number = None
+            elif bank_account_number is not None:
+                bank_account_number = str(bank_account_number).strip()
+            
+            _merge_edit_payload(entry, current_payload, payload_dict=payload_dict, bank_name=bank_name, bank_account_number=bank_account_number)
+            
+            # Collect files from form
+            files_list = []
+            if "files" in form_data:
+                for file_item in form_data.getlist("files"):
+                    if isinstance(file_item, UploadFile):
+                        fn = getattr(file_item, "filename", None) or getattr(file_item, "name", None)
+                        if fn and str(fn).strip() and fn != "undefined":
+                            files_list.append(file_item)
+            
+            # Upload new files to Railway Storage and create attachments
+            company_id = entry.company_id
+            inflow_form_id = entry.inflow_form_id
+            for file in files_list:
+                if hasattr(file, "filename") and file.filename and file.filename.strip():
+                    try:
+                        file_content = await file.read()
+                        if file_content and len(file_content) > 0:
+                            file_url = upload_file_to_railway(
+                                file_content=file_content,
+                                file_name=file.filename,
+                                folder=f"inflow/{company_id}/{inflow_form_id}"
+                            )
+                            if file_url:
+                                db_attachment = InflowEntryAttachment(
+                                    inflow_entry_id=entry.id,
+                                    file_url=file_url
+                                )
+                                db.add(db_attachment)
+                    except Exception:
+                        pass  # skip failed uploads, continue with others
+        else:
+            # JSON body
+            body = await request.body()
+            try:
+                update_data = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON body")
+            payload_dict = update_data.get("payload")
+            bank_name = update_data.get("bank_name")
+            bank_account_number = update_data.get("bank_account_number")
+            _merge_edit_payload(entry, current_payload, payload_dict=payload_dict, bank_name=bank_name, bank_account_number=bank_account_number)
         
-        # Overlay bank_name and bank_account_number if provided
-        if update_data.bank_name is not None:
-            current_payload["bank_name"] = update_data.bank_name
-        if update_data.bank_account_number is not None:
-            current_payload["bank_account_number"] = update_data.bank_account_number
-        
-        entry.payload = current_payload
         db.commit()
         db.refresh(entry)
         
