@@ -56,6 +56,7 @@
         }
 
         input[type="number"],
+        input[type="text"],
         textarea {
             width: 100%;
             padding: 12px 15px;
@@ -67,6 +68,7 @@
         }
 
         input[type="number"]:focus,
+        input[type="text"]:focus,
         textarea:focus {
             outline: none;
             border-color: #667eea;
@@ -260,6 +262,24 @@
             </div>
 
             <div class="form-group">
+                <label for="bankName">Bank Name (optional)</label>
+                <input 
+                    type="text" 
+                    id="bankName" 
+                    placeholder="e.g. HDFC Bank"
+                />
+            </div>
+
+            <div class="form-group">
+                <label for="bankAccountNumber">Bank Account Number (optional)</label>
+                <input 
+                    type="text" 
+                    id="bankAccountNumber" 
+                    placeholder="e.g. 1234567890"
+                />
+            </div>
+
+            <div class="form-group">
                 <label>Upload Files (from your system)</label>
                 <div class="file-upload-area" id="fileUploadArea">
                     <label for="fileInput" class="file-label">
@@ -374,6 +394,11 @@
             formData.append('company_id', companyId);
             formData.append('inflow_form_id', inflowFormId);
             formData.append('payload', JSON.stringify(payloadObj));
+
+            const bankName = document.getElementById('bankName').value.trim();
+            const bankAccountNumber = document.getElementById('bankAccountNumber').value.trim();
+            if (bankName) formData.append('bank_name', bankName);
+            if (bankAccountNumber) formData.append('bank_account_number', bankAccountNumber);
 
             // Add files
             selectedFiles.forEach(file => {

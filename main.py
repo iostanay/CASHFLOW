@@ -1122,6 +1122,8 @@ async def add_transaction(
     - **company_id**: ID of the company (required, form field)
     - **inflow_form_id**: ID of the inflow form (required, form field)
     - **payload**: JSON string containing the form data (required, form field)
+    - **bank_name**: Optional bank name (form field)
+    - **bank_account_number**: Optional bank account number (form field)
     - **files**: Optional list of files to upload as attachments (can upload multiple files from device)
     
     Returns the created entry with all attachments
@@ -1131,6 +1133,8 @@ async def add_transaction(
       -F "company_id=1" \\
       -F "inflow_form_id=1" \\
       -F "payload={\\"amount\\": 1000}" \\
+      -F "bank_name=My Bank" \\
+      -F "bank_account_number=1234567890" \\
       -F "files=@/path/to/file1.pdf" \\
       -F "files=@/path/to/file2.jpg"
     """
@@ -1275,6 +1279,14 @@ async def add_transaction(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Payload must be a JSON object/dict, got {type(payload_dict).__name__}. Example: {{\"key\": \"value\"}}"
             )
+        
+        # Merge optional bank fields from form into payload (so they are stored with the entry)
+        bank_name = form_data.get("bank_name")
+        bank_account_number = form_data.get("bank_account_number")
+        if bank_name is not None and str(bank_name).strip():
+            payload_dict["bank_name"] = str(bank_name).strip()
+        if bank_account_number is not None and str(bank_account_number).strip():
+            payload_dict["bank_account_number"] = str(bank_account_number).strip()
         
         # Create inflow entry payload
         db_entry = InflowEntryPayload(
