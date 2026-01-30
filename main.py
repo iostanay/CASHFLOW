@@ -26,7 +26,6 @@ from schemas import (
     InflowFormFieldCreate, InflowFormFieldUpdate, InflowFormFieldResponse, CustomFieldResponse,
     FileUploadResponse, PresignedUrlResponse,
     InflowEntryPayloadCreate, InflowEntryPayloadResponse, InflowEntryCreateResponse,
-    InflowEntryPayloadUpdate,
 )
 from firebase_storage import upload_file_to_firebase
 from railway_storage import upload_file_to_railway, regenerate_presigned_url, generate_presigned_url_from_path
@@ -841,22 +840,19 @@ def list_inflow_forms(
 @app.get("/api/inflow-forms/sources", response_model=List[InflowFormSourceResponse])
 def list_inflow_form_sources(
     flow_type: str,
-    mode: Optional[str] = None,
+    mode: str,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
 ):
     """
-    Get id and source from inflow_forms filtered by flow_type and optionally by mode.
-    - **flow_type**: Required (e.g. INFLOW).
-    - **mode**: Optional (e.g. BANK, CASH, UPI). If omitted, returns all sources for the flow_type.
+    Get id and source from inflow_forms filtered by flow_type and mode.
+    Equivalent to: SELECT id, source FROM inflow_forms WHERE flow_type = ? AND mode = ?
     """
     try:
-        query = db.query(InflowForm.id, InflowForm.source).filter(InflowForm.flow_type == flow_type)
-        if mode is not None and mode.strip():
-            query = query.filter(InflowForm.mode == mode)
         rows = (
-            query
+            db.query(InflowForm.id, InflowForm.source)
+            .filter(InflowForm.flow_type == flow_type, InflowForm.mode == mode)
             .order_by(InflowForm.updated_at.desc())
             .offset(skip)
             .limit(limit)
@@ -1126,8 +1122,6 @@ async def add_transaction(
     - **company_id**: ID of the company (required, form field)
     - **inflow_form_id**: ID of the inflow form (required, form field)
     - **payload**: JSON string containing the form data (required, form field)
-    - **bank_name**: Optional bank name (form field)
-    - **bank_account_number**: Optional bank account number (form field)
     - **files**: Optional list of files to upload as attachments (can upload multiple files from device)
     
     Returns the created entry with all attachments
@@ -1137,8 +1131,6 @@ async def add_transaction(
       -F "company_id=1" \\
       -F "inflow_form_id=1" \\
       -F "payload={\\"amount\\": 1000}" \\
-      -F "bank_name=My Bank" \\
-      -F "bank_account_number=1234567890" \\
       -F "files=@/path/to/file1.pdf" \\
       -F "files=@/path/to/file2.jpg"
     """
@@ -1283,14 +1275,6 @@ async def add_transaction(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Payload must be a JSON object/dict, got {type(payload_dict).__name__}. Example: {{\"key\": \"value\"}}"
             )
-        
-        # Merge optional bank fields from form into payload (so they are stored with the entry)
-        bank_name = form_data.get("bank_name")
-        bank_account_number = form_data.get("bank_account_number")
-        if bank_name is not None and str(bank_name).strip():
-            payload_dict["bank_name"] = str(bank_name).strip()
-        if bank_account_number is not None and str(bank_account_number).strip():
-            payload_dict["bank_account_number"] = str(bank_account_number).strip()
         
         # Create inflow entry payload
         db_entry = InflowEntryPayload(
@@ -1575,205 +1559,6 @@ async def add_transaction_json(
         )
 
 
-# Edit Transaction (Update inflow entry by ID)
-# Supports both JSON body and multipart/form-data (with file upload)
-
-def _merge_edit_payload(entry, current_payload, payload_dict=None, bank_name=None, bank_account_number=None):
-    """Merge payload dict and bank fields into current_payload; update entry.payload."""
-    if payload_dict is not None and isinstance(payload_dict, dict):
-        current_payload.update(payload_dict)
-    if bank_name is not None:
-        current_payload["bank_name"] = bank_name
-    if bank_account_number is not None:
-        current_payload["bank_account_number"] = bank_account_number
-    entry.payload = current_payload
-
-
-@app.put("/api/edit-transaction/{entry_id}", response_model=InflowEntryCreateResponse, status_code=status.HTTP_200_OK)
-async def edit_transaction(
-    entry_id: int,
-    request: Request,
-    db: Session = Depends(get_db)
-):
-    """
-    Update an existing inflow entry by ID.
-    
-    **JSON body** (Content-Type: application/json):
-    - **payload**: Optional JSON object to merge into existing form data (partial update)
-    - **bank_name**: Optional bank name
-    - **bank_account_number**: Optional bank account number
-    
-    **Form-data** (Content-Type: multipart/form-data) – supports file upload:
-    - **payload**: Optional JSON string to merge into existing form data
-    - **bank_name**: Optional bank name
-    - **bank_account_number**: Optional bank account number
-    - **files**: Optional list of files to upload as new attachments (multiple allowed)
-    
-    Returns the updated entry with all attachments.
-    
-    Example with files (curl):
-    curl -X PUT "http://localhost:8000/api/edit-transaction/123" \\
-      -F "payload={\\"amount\\": 2000}" \\
-      -F "bank_name=HDFC Bank" \\
-      -F "files=@/path/to/file1.pdf" \\
-      -F "files=@/path/to/file2.jpg"
-    """
-    try:
-        entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == entry_id).first()
-        if not entry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Inflow entry with id {entry_id} not found"
-            )
-        
-        current_payload = dict(entry.payload) if entry.payload else {}
-        content_type = (request.headers.get("content-type") or "").lower()
-        
-        if "multipart/form-data" in content_type:
-            # Form-data: payload (optional JSON string), bank_name, bank_account_number, files
-            form_data = await request.form()
-            
-            payload_dict = None
-            payload_str = form_data.get("payload")
-            if payload_str is not None and str(payload_str).strip():
-                try:
-                    payload_dict = json.loads(payload_str) if isinstance(payload_str, str) else payload_str
-                except json.JSONDecodeError:
-                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON in payload field")
-            
-            bank_name = form_data.get("bank_name")
-            bank_account_number = form_data.get("bank_account_number")
-            if bank_name is not None and str(bank_name).strip() == "":
-                bank_name = None
-            elif bank_name is not None:
-                bank_name = str(bank_name).strip()
-            if bank_account_number is not None and str(bank_account_number).strip() == "":
-                bank_account_number = None
-            elif bank_account_number is not None:
-                bank_account_number = str(bank_account_number).strip()
-            
-            _merge_edit_payload(entry, current_payload, payload_dict=payload_dict, bank_name=bank_name, bank_account_number=bank_account_number)
-            
-            # Collect files from form
-            files_list = []
-            if "files" in form_data:
-                for file_item in form_data.getlist("files"):
-                    if isinstance(file_item, UploadFile):
-                        fn = getattr(file_item, "filename", None) or getattr(file_item, "name", None)
-                        if fn and str(fn).strip() and fn != "undefined":
-                            files_list.append(file_item)
-            
-            # Upload new files to Railway Storage and create attachments
-            company_id = entry.company_id
-            inflow_form_id = entry.inflow_form_id
-            for file in files_list:
-                if hasattr(file, "filename") and file.filename and file.filename.strip():
-                    try:
-                        file_content = await file.read()
-                        if file_content and len(file_content) > 0:
-                            file_url = upload_file_to_railway(
-                                file_content=file_content,
-                                file_name=file.filename,
-                                folder=f"inflow/{company_id}/{inflow_form_id}"
-                            )
-                            if file_url:
-                                db_attachment = InflowEntryAttachment(
-                                    inflow_entry_id=entry.id,
-                                    file_url=file_url
-                                )
-                                db.add(db_attachment)
-                    except Exception:
-                        pass  # skip failed uploads, continue with others
-        else:
-            # JSON body
-            body = await request.body()
-            try:
-                update_data = json.loads(body) if body else {}
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON body")
-            payload_dict = update_data.get("payload")
-            bank_name = update_data.get("bank_name")
-            bank_account_number = update_data.get("bank_account_number")
-            _merge_edit_payload(entry, current_payload, payload_dict=payload_dict, bank_name=bank_name, bank_account_number=bank_account_number)
-        
-        db.commit()
-        db.refresh(entry)
-        
-        attachments = db.query(InflowEntryAttachment).filter(
-            InflowEntryAttachment.inflow_entry_id == entry.id
-        ).all()
-        
-        return {
-            "success": True,
-            "message": f"Inflow entry {entry_id} updated successfully",
-            "entry": {
-                "id": entry.id,
-                "company_id": entry.company_id,
-                "inflow_form_id": entry.inflow_form_id,
-                "payload": entry.payload,
-                "created_at": entry.created_at,
-                "attachments": [
-                    {
-                        "id": att.id,
-                        "inflow_entry_id": att.inflow_entry_id,
-                        "file_url": att.file_url,
-                        "created_at": att.created_at
-                    }
-                    for att in attachments
-                ]
-            }
-        }
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error updating inflow entry: {str(e)}"
-        )
-
-
-# Delete Transaction (Delete inflow entry by ID)
-
-@app.delete("/api/delete-transaction/{entry_id}", status_code=status.HTTP_200_OK)
-async def delete_transaction(
-    entry_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Delete an inflow entry by ID.
-    
-    - **entry_id**: ID of the inflow entry to delete (path parameter)
-    
-    Cascades to delete all attachments. Returns success message.
-    """
-    try:
-        entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == entry_id).first()
-        if not entry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Inflow entry with id {entry_id} not found"
-            )
-        
-        db.delete(entry)
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": f"Inflow entry {entry_id} deleted successfully"
-        }
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting inflow entry: {str(e)}"
-        )
-
-
 # Presigned URL Regeneration Endpoint
 
 @app.post("/api/regenerate-presigned-url", response_model=PresignedUrlResponse, status_code=status.HTTP_200_OK)
@@ -1893,7 +1678,7 @@ async def regenerate_attachment_url(
 
 # List Inflow Entries with Filters
 
-@app.get("/api/inflow-entries", response_model=List[InflowEntryPayloadResponse], status_code=status.HTTP_200_OK)
+@app.get("/api/inflow-entries", status_code=status.HTTP_200_OK)
 async def list_inflow_entries(
     company_id: Optional[int] = None,
     inflow_form_id: Optional[int] = None,
@@ -1903,64 +1688,51 @@ async def list_inflow_entries(
     db: Session = Depends(get_db)
 ):
     """
-    List inflow entries with optional filters
+    List inflow entries with optional filters.
+    
+    Returns: { "success": true, "total": n, "skip": skip, "limit": limit, "data": [...] }
     
     - **company_id**: Filter by company ID (optional)
     - **inflow_form_id**: Filter by inflow form ID (optional)
     - **mode**: Filter by mode from payload JSON (optional, e.g., "BANK", "CASH", "UPI")
     - **skip**: Number of records to skip (for pagination)
     - **limit**: Maximum number of records to return
-    
-    Returns list of inflow entries with their attachments
     """
     try:
-        # Start with base query
         query = db.query(InflowEntryPayload)
         
-        # Apply filters
         if company_id is not None:
             query = query.filter(InflowEntryPayload.company_id == company_id)
         
         if inflow_form_id is not None:
             query = query.filter(InflowEntryPayload.inflow_form_id == inflow_form_id)
         
-        # Filter by mode in payload (JSON field)
         if mode:
-            # MySQL JSON field query - check if payload contains mode
-            # For MySQL, we need to use JSON_EXTRACT or cast to text
-            # Try different approaches based on database type
             try:
-                # Method 1: Direct JSON key access (works with SQLAlchemy JSON type)
                 query = query.filter(
                     InflowEntryPayload.payload['mode'].astext == mode
                 )
-            except:
-                # Method 2: Use JSON_EXTRACT for MySQL
-                # This is a fallback if the above doesn't work
+            except Exception:
                 from sqlalchemy import text
                 query = query.filter(
-                    text(f"JSON_EXTRACT(payload, '$.mode') = :mode")
+                    text("JSON_EXTRACT(payload, '$.mode') = :mode")
                 ).params(mode=mode)
         
-        # Get total count before pagination
         total_count = query.count()
-        
-        # Apply pagination and ordering
         entries = query.order_by(InflowEntryPayload.created_at.desc()).offset(skip).limit(limit).all()
         
-        # Get attachments for each entry
         result = []
         for entry in entries:
-            # Get attachments for this entry
             attachments = db.query(InflowEntryAttachment).filter(
                 InflowEntryAttachment.inflow_entry_id == entry.id
             ).all()
-            
-            # Build response
+            payload = entry.payload or {}
             entry_data = {
                 "id": entry.id,
                 "company_id": entry.company_id,
                 "inflow_form_id": entry.inflow_form_id,
+                "bank_name": payload.get("bank_name"),
+                "bank_account_number": payload.get("bank_account_number"),
                 "payload": entry.payload,
                 "created_at": entry.created_at,
                 "attachments": [
@@ -1975,7 +1747,13 @@ async def list_inflow_entries(
             }
             result.append(entry_data)
         
-        return result
+        return {
+            "success": True,
+            "total": total_count,
+            "skip": skip,
+            "limit": limit,
+            "data": result
+        }
         
     except Exception as e:
         raise HTTPException(
@@ -1986,7 +1764,91 @@ async def list_inflow_entries(
 
 # Alternative endpoint with JSON response including metadata
 
-
+@app.get("/api/inflow-entries-with-meta")
+async def list_inflow_entries_with_meta(
+    company_id: Optional[int] = None,
+    inflow_form_id: Optional[int] = None,
+    mode: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    """
+    List inflow entries with metadata (total count, pagination info)
+    
+    Same filters as /api/inflow-entries but includes pagination metadata
+    """
+    try:
+        # Start with base query
+        query = db.query(InflowEntryPayload)
+        
+        # Apply filters
+        if company_id is not None:
+            query = query.filter(InflowEntryPayload.company_id == company_id)
+        
+        if inflow_form_id is not None:
+            query = query.filter(InflowEntryPayload.inflow_form_id == inflow_form_id)
+        
+        # Filter by mode in payload (JSON field)
+        if mode:
+            try:
+                # Method 1: Direct JSON key access (works with SQLAlchemy JSON type)
+                query = query.filter(
+                    InflowEntryPayload.payload['mode'].astext == mode
+                )
+            except:
+                # Method 2: Use JSON_EXTRACT for MySQL (fallback)
+                from sqlalchemy import text
+                query = query.filter(
+                    text(f"JSON_EXTRACT(payload, '$.mode') = :mode")
+                ).params(mode=mode)
+        
+        # Get total count
+        total_count = query.count()
+        
+        # Apply pagination and ordering
+        entries = query.order_by(InflowEntryPayload.created_at.desc()).offset(skip).limit(limit).all()
+        
+        # Get attachments for each entry
+        entries_list = []
+        for entry in entries:
+            attachments = db.query(InflowEntryAttachment).filter(
+                InflowEntryAttachment.inflow_entry_id == entry.id
+            ).all()
+            
+            payload = entry.payload or {}
+            entries_list.append({
+                "id": entry.id,
+                "company_id": entry.company_id,
+                "inflow_form_id": entry.inflow_form_id,
+                "bank_name": payload.get("bank_name"),
+                "bank_account_number": payload.get("bank_account_number"),
+                "payload": entry.payload,
+                "created_at": entry.created_at,
+                "attachments": [
+                    {
+                        "id": att.id,
+                        "inflow_entry_id": att.inflow_entry_id,
+                        "file_url": att.file_url,
+                        "created_at": att.created_at
+                    }
+                    for att in attachments
+                ]
+            })
+        
+        return {
+            "success": True,
+            "total": total_count,
+            "skip": skip,
+            "limit": limit,
+            "data": entries_list
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching inflow entries: {str(e)}"
+        )
 
 
 if __name__ == "__main__":
