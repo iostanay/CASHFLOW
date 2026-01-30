@@ -841,19 +841,22 @@ def list_inflow_forms(
 @app.get("/api/inflow-forms/sources", response_model=List[InflowFormSourceResponse])
 def list_inflow_form_sources(
     flow_type: str,
-    mode: str,
+    mode: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
 ):
     """
-    Get id and source from inflow_forms filtered by flow_type and mode.
-    Equivalent to: SELECT id, source FROM inflow_forms WHERE flow_type = ? AND mode = ?
+    Get id and source from inflow_forms filtered by flow_type and optionally by mode.
+    - **flow_type**: Required (e.g. INFLOW).
+    - **mode**: Optional (e.g. BANK, CASH, UPI). If omitted, returns all sources for the flow_type.
     """
     try:
+        query = db.query(InflowForm.id, InflowForm.source).filter(InflowForm.flow_type == flow_type)
+        if mode is not None and mode.strip():
+            query = query.filter(InflowForm.mode == mode)
         rows = (
-            db.query(InflowForm.id, InflowForm.source)
-            .filter(InflowForm.flow_type == flow_type, InflowForm.mode == mode)
+            query
             .order_by(InflowForm.updated_at.desc())
             .offset(skip)
             .limit(limit)
