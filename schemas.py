@@ -440,3 +440,13 @@ class InflowEntryCreateResponse(BaseModel):
     success: bool
     message: str
     entry: InflowEntryPayloadResponse
+
+
+class InflowEntryPayloadUpdate(BaseModel):
+    """Schema for updating inflow entry payload (partial update)"""
+    payload: Optional[dict] = Field(None, description="JSON payload to merge into existing form data")
+    bank_name: Optional[str] = Field(None, description="Bank name (optional)")
+    bank_account_number: Optional[str] = Field(None, description="Bank account number (optional)")
+
+    class Config:
+        from_attributes = True

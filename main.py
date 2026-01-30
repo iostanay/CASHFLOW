@@ -26,6 +26,7 @@ from schemas import (
     InflowFormFieldCreate, InflowFormFieldUpdate, InflowFormFieldResponse, CustomFieldResponse,
     FileUploadResponse, PresignedUrlResponse,
     InflowEntryPayloadCreate, InflowEntryPayloadResponse, InflowEntryCreateResponse,
+    InflowEntryPayloadUpdate,
 )
 from firebase_storage import upload_file_to_firebase
 from railway_storage import upload_file_to_railway, regenerate_presigned_url, generate_presigned_url_from_path
@@ -1568,6 +1569,124 @@ async def add_transaction_json(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error creating inflow entry: {str(e)}"
+        )
+
+
+# Edit Transaction (Update inflow entry by ID)
+
+@app.put("/api/edit-transaction/{entry_id}", response_model=InflowEntryCreateResponse, status_code=status.HTTP_200_OK)
+async def edit_transaction(
+    entry_id: int,
+    update_data: InflowEntryPayloadUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update an existing inflow entry by ID.
+    
+    - **entry_id**: ID of the inflow entry to update (path parameter)
+    - **payload**: Optional JSON object to merge into existing form data (partial update)
+    - **bank_name**: Optional bank name
+    - **bank_account_number**: Optional bank account number
+    
+    Returns the updated entry with attachments.
+    """
+    try:
+        entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == entry_id).first()
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Inflow entry with id {entry_id} not found"
+            )
+        
+        # Start with existing payload
+        current_payload = dict(entry.payload) if entry.payload else {}
+        
+        # Merge provided payload into existing (shallow merge)
+        if update_data.payload is not None and isinstance(update_data.payload, dict):
+            current_payload.update(update_data.payload)
+        
+        # Overlay bank_name and bank_account_number if provided
+        if update_data.bank_name is not None:
+            current_payload["bank_name"] = update_data.bank_name
+        if update_data.bank_account_number is not None:
+            current_payload["bank_account_number"] = update_data.bank_account_number
+        
+        entry.payload = current_payload
+        db.commit()
+        db.refresh(entry)
+        
+        attachments = db.query(InflowEntryAttachment).filter(
+            InflowEntryAttachment.inflow_entry_id == entry.id
+        ).all()
+        
+        return {
+            "success": True,
+            "message": f"Inflow entry {entry_id} updated successfully",
+            "entry": {
+                "id": entry.id,
+                "company_id": entry.company_id,
+                "inflow_form_id": entry.inflow_form_id,
+                "payload": entry.payload,
+                "created_at": entry.created_at,
+                "attachments": [
+                    {
+                        "id": att.id,
+                        "inflow_entry_id": att.inflow_entry_id,
+                        "file_url": att.file_url,
+                        "created_at": att.created_at
+                    }
+                    for att in attachments
+                ]
+            }
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating inflow entry: {str(e)}"
+        )
+
+
+# Delete Transaction (Delete inflow entry by ID)
+
+@app.delete("/api/delete-transaction/{entry_id}", status_code=status.HTTP_200_OK)
+async def delete_transaction(
+    entry_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Delete an inflow entry by ID.
+    
+    - **entry_id**: ID of the inflow entry to delete (path parameter)
+    
+    Cascades to delete all attachments. Returns success message.
+    """
+    try:
+        entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == entry_id).first()
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Inflow entry with id {entry_id} not found"
+            )
+        
+        db.delete(entry)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Inflow entry {entry_id} deleted successfully"
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting inflow entry: {str(e)}"
         )
 
 
