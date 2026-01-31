@@ -416,45 +416,45 @@ def read_root():
 
 # Inflow Receipt Master Endpoints
 
-@app.get("/api/inflow-receipt-master", response_model=List[InflowReceiptMasterResponse])
-def list_inflow_receipt_master(
-    skip: int = 0,
-    limit: int = 100,
-    name: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """
-    List all inflow receipt master records with optional filtering
-    """
-    try:
-        query = db.query(InflowReceiptMaster)
+# @app.get("/api/inflow-receipt-master", response_model=List[InflowReceiptMasterResponse])
+# def list_inflow_receipt_master(
+#     skip: int = 0,
+#     limit: int = 100,
+#     name: Optional[str] = None,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     List all inflow receipt master records with optional filtering
+#     """
+#     try:
+#         query = db.query(InflowReceiptMaster)
         
-        # Apply filters
-        if name:
-            query = query.filter(InflowReceiptMaster.name.like(f"%{name}%"))
+#         # Apply filters
+#         if name:
+#             query = query.filter(InflowReceiptMaster.name.like(f"%{name}%"))
         
-        # Order by name ascending
-        records = query.order_by(InflowReceiptMaster.name.asc()).offset(skip).limit(limit).all()
-        return records
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching inflow receipt master: {str(e)}"
-        )
+#         # Order by name ascending
+#         records = query.order_by(InflowReceiptMaster.name.asc()).offset(skip).limit(limit).all()
+#         return records
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error fetching inflow receipt master: {str(e)}"
+#         )
 
 
-@app.get("/api/inflow-receipt-master/{entity_id}", response_model=InflowReceiptMasterResponse)
-def get_inflow_receipt_master(entity_id: int, db: Session = Depends(get_db)):
-    """
-    Get a specific inflow receipt master record by ID
-    """
-    record = db.query(InflowReceiptMaster).filter(InflowReceiptMaster.entity_id == entity_id).first()
-    if not record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Inflow receipt master with id {entity_id} not found"
-        )
-    return record
+# @app.get("/api/inflow-receipt-master/{entity_id}", response_model=InflowReceiptMasterResponse)
+# def get_inflow_receipt_master(entity_id: int, db: Session = Depends(get_db)):
+#     """
+#     Get a specific inflow receipt master record by ID
+#     """
+#     record = db.query(InflowReceiptMaster).filter(InflowReceiptMaster.entity_id == entity_id).first()
+#     if not record:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail=f"Inflow receipt master with id {entity_id} not found"
+#         )
+#     return record
 
 
 # Company Endpoints
@@ -743,7 +743,7 @@ def delete_company(company_id: int, db: Session = Depends(get_db)):
 
 # --- Inflow Forms ---
 
-@app.post("/api/inflow-forms", response_model=InflowFormWithFieldsResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/flow-forms", response_model=InflowFormWithFieldsResponse, status_code=status.HTTP_201_CREATED)
 def create_inflow_form_with_fields(payload: InflowFormCreateWithFields, db: Session = Depends(get_db)):
     """
     Create a new inflow form with custom fields in one request.
@@ -808,7 +808,7 @@ def create_inflow_form_with_fields(payload: InflowFormCreateWithFields, db: Sess
         )
 
 
-@app.get("/api/inflow-forms", response_model=List[InflowFormResponse])
+@app.get("/api/flow-forms", response_model=List[InflowFormResponse])
 def list_inflow_forms(
     flow_type: str,
     mode: str,
@@ -837,7 +837,7 @@ def list_inflow_forms(
         )
 
 
-@app.get("/api/inflow-forms/sources", response_model=List[InflowFormSourceResponse])
+@app.get("/api/flow-forms/sources", response_model=List[InflowFormSourceResponse])
 def list_inflow_form_sources(
     flow_type: str,
     mode: Optional[str] = None,
@@ -871,7 +871,7 @@ def list_inflow_form_sources(
         )
 
 
-@app.get("/api/inflow-forms/{form_id}", response_model=InflowFormWithFieldsResponse)
+@app.get("/api/flow-forms/{form_id}", response_model=InflowFormWithFieldsResponse)
 def get_inflow_form(form_id: int, db: Session = Depends(get_db)):
     """Get an inflow form by ID with its custom fields."""
     form = db.query(InflowForm).filter(InflowForm.id == form_id).first()
@@ -906,7 +906,7 @@ def get_inflow_form(form_id: int, db: Session = Depends(get_db)):
     )
 
 
-@app.put("/api/inflow-forms/{form_id}", response_model=InflowFormResponse)
+@app.put("/api/flow-forms/{form_id}", response_model=InflowFormResponse)
 def update_inflow_form(form_id: int, payload: InflowFormUpdate, db: Session = Depends(get_db)):
     """Update an inflow form by ID."""
     form = db.query(InflowForm).filter(InflowForm.id == form_id).first()
@@ -930,7 +930,7 @@ def update_inflow_form(form_id: int, payload: InflowFormUpdate, db: Session = De
         )
 
 
-@app.delete("/api/inflow-forms/{form_id}")
+@app.delete("/api/flow-forms/{form_id}")
 def delete_inflow_form(form_id: int, db: Session = Depends(get_db)):
     """Delete an inflow form by ID (cascades to fields)."""
     form = db.query(InflowForm).filter(InflowForm.id == form_id).first()
@@ -953,7 +953,7 @@ def delete_inflow_form(form_id: int, db: Session = Depends(get_db)):
 
 # --- Inflow Form Fields (Individual CRUD) ---
 
-@app.post("/api/inflow-form-fields", response_model=InflowFormFieldResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/flow-form-fields", response_model=InflowFormFieldResponse, status_code=status.HTTP_201_CREATED)
 def create_inflow_form_field(payload: InflowFormFieldCreate, db: Session = Depends(get_db)):
     """Create a new inflow form field."""
     form = db.query(InflowForm).filter(InflowForm.id == payload.inflow_form_id).first()
@@ -997,7 +997,7 @@ def create_inflow_form_field(payload: InflowFormFieldCreate, db: Session = Depen
 #         )
 
 
-@app.get("/api/inflow-form-fields/{field_id}", response_model=InflowFormFieldResponse)
+@app.get("/api/flow-form-fields/{field_id}", response_model=InflowFormFieldResponse)
 def get_inflow_form_field(field_id: int, db: Session = Depends(get_db)):
     """Get an inflow form field by ID."""
     field = db.query(InflowFormField).filter(InflowFormField.id == field_id).first()
@@ -1009,7 +1009,7 @@ def get_inflow_form_field(field_id: int, db: Session = Depends(get_db)):
     return field
 
 
-@app.put("/api/inflow-form-fields/{field_id}", response_model=InflowFormFieldResponse)
+@app.put("/api/flow-form-fields/{field_id}", response_model=InflowFormFieldResponse)
 def update_inflow_form_field(field_id: int, payload: InflowFormFieldUpdate, db: Session = Depends(get_db)):
     """Update an inflow form field by ID."""
     field = db.query(InflowFormField).filter(InflowFormField.id == field_id).first()
@@ -1033,7 +1033,7 @@ def update_inflow_form_field(field_id: int, payload: InflowFormFieldUpdate, db: 
         )
 
 
-@app.delete("/api/inflow-form-fields/{field_id}")
+@app.delete("/api/flow-form-fields/{field_id}")
 def delete_inflow_form_field(field_id: int, db: Session = Depends(get_db)):
     """Delete an inflow form field by ID."""
     field = db.query(InflowFormField).filter(InflowFormField.id == field_id).first()
@@ -1056,62 +1056,62 @@ def delete_inflow_form_field(field_id: int, db: Session = Depends(get_db)):
 
 # File Upload Endpoint
 
-@app.post("/api/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
-async def upload_file(
-    file: UploadFile = File(...),
-    folder: Optional[str] = Form(default="attachments", description="Folder path in Railway Storage")
-):
-    """
-    Upload a file to Railway Storage
+# @app.post("/api/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
+# async def upload_file(
+#     file: UploadFile = File(...),
+#     folder: Optional[str] = Form(default="attachments", description="Folder path in Railway Storage")
+# ):
+#     """
+#     Upload a file to Railway Storage
     
-    - **file**: The file to upload (required)
-    - **folder**: Optional folder path in Railway Storage (default: "attachments")
+#     - **file**: The file to upload (required)
+#     - **folder**: Optional folder path in Railway Storage (default: "attachments")
     
-    Returns the public URL of the uploaded file
-    """
-    try:
-        # Read file content
-        file_content = await file.read()
+#     Returns the public URL of the uploaded file
+#     """
+#     try:
+#         # Read file content
+#         file_content = await file.read()
         
-        if not file_content:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File is empty"
-            )
+#         if not file_content:
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="File is empty"
+#             )
         
-        # Upload to Railway Storage
-        try:
-            file_url = upload_file_to_railway(
-                file_content=file_content,
-                file_name=file.filename or "unnamed_file",
-                folder=folder
-            )
+#         # Upload to Railway Storage
+#         try:
+#             file_url = upload_file_to_railway(
+#                 file_content=file_content,
+#                 file_name=file.filename or "unnamed_file",
+#                 folder=folder
+#             )
             
-            if not file_url:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to upload file to Railway Storage: No URL returned"
-                )
-        except Exception as upload_error:
-            error_message = str(upload_error)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to upload file to Railway Storage: {error_message}"
-            )
+#             if not file_url:
+#                 raise HTTPException(
+#                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#                     detail="Failed to upload file to Railway Storage: No URL returned"
+#                 )
+#         except Exception as upload_error:
+#             error_message = str(upload_error)
+#             raise HTTPException(
+#                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#                 detail=f"Failed to upload file to Railway Storage: {error_message}"
+#             )
         
-        return {
-            "success": True,
-            "message": "File uploaded successfully",
-            "file_url": file_url,
-            "file_name": file.filename
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error uploading file: {str(e)}"
-        )
+#         return {
+#             "success": True,
+#             "message": "File uploaded successfully",
+#             "file_url": file_url,
+#             "file_name": file.filename
+#         }
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error uploading file: {str(e)}"
+#         )
 
 
 # Inflow Entry Transaction Endpoint
@@ -1571,124 +1571,124 @@ async def add_transaction_json(
 
 # Presigned URL Regeneration Endpoint
 
-@app.post("/api/regenerate-presigned-url", response_model=PresignedUrlResponse, status_code=status.HTTP_200_OK)
-async def regenerate_presigned_url_endpoint(
-    file_url: str = Form(..., description="Existing Railway Storage URL (can be expired)"),
-    db: Session = Depends(get_db)
-):
-    """
-    Regenerate presigned URL for an expired or existing Railway Storage file URL
+# @app.post("/api/regenerate-presigned-url", response_model=PresignedUrlResponse, status_code=status.HTTP_200_OK)
+# async def regenerate_presigned_url_endpoint(
+#     file_url: str = Form(..., description="Existing Railway Storage URL (can be expired)"),
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     Regenerate presigned URL for an expired or existing Railway Storage file URL
     
-    - **file_url**: Existing Railway Storage URL (can be expired presigned URL or direct URL)
+#     - **file_url**: Existing Railway Storage URL (can be expired presigned URL or direct URL)
     
-    Returns a new presigned URL valid for 1 week (Railway Storage maximum)
+#     Returns a new presigned URL valid for 1 week (Railway Storage maximum)
     
-    This endpoint is useful when:
-    - Presigned URLs have expired (they expire after 1 week)
-    - You need a fresh presigned URL for file access
-    - You have a direct URL that needs to be converted to presigned URL
-    """
-    try:
-        if not file_url or not file_url.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="file_url is required"
-            )
+#     This endpoint is useful when:
+#     - Presigned URLs have expired (they expire after 1 week)
+#     - You need a fresh presigned URL for file access
+#     - You have a direct URL that needs to be converted to presigned URL
+#     """
+#     try:
+#         if not file_url or not file_url.strip():
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="file_url is required"
+#             )
         
-        print(f"🔄 Regenerating presigned URL for: {file_url[:100]}...")
+#         print(f"🔄 Regenerating presigned URL for: {file_url[:100]}...")
         
-        # Regenerate presigned URL
-        new_presigned_url = regenerate_presigned_url(file_url.strip())
+#         # Regenerate presigned URL
+#         new_presigned_url = regenerate_presigned_url(file_url.strip())
         
-        if not new_presigned_url:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate presigned URL. Check if the file exists in Railway Storage."
-            )
+#         if not new_presigned_url:
+#             raise HTTPException(
+#                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#                 detail="Failed to generate presigned URL. Check if the file exists in Railway Storage."
+#             )
         
-        return {
-            "success": True,
-            "message": "Presigned URL generated successfully (valid for 1 week)",
-            "file_url": new_presigned_url,
-            "expires_in_seconds": 604800  # 1 week
-        }
+#         return {
+#             "success": True,
+#             "message": "Presigned URL generated successfully (valid for 1 week)",
+#             "file_url": new_presigned_url,
+#             "expires_in_seconds": 604800  # 1 week
+#         }
         
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error regenerating presigned URL: {str(e)}"
-        )
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error regenerating presigned URL: {str(e)}"
+#         )
 
 
-@app.post("/api/regenerate-attachment-url/{attachment_id}", response_model=PresignedUrlResponse, status_code=status.HTTP_200_OK)
-async def regenerate_attachment_url(
-    attachment_id: int,
-    db: Session = Depends(get_db)
-):
-    """
-    Regenerate presigned URL for an attachment by ID and update database
+# @app.post("/api/regenerate-attachment-url/{attachment_id}", response_model=PresignedUrlResponse, status_code=status.HTTP_200_OK)
+# async def regenerate_attachment_url(
+#     attachment_id: int,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     Regenerate presigned URL for an attachment by ID and update database
     
-    - **attachment_id**: ID of the attachment in database
+#     - **attachment_id**: ID of the attachment in database
     
-    Returns a new presigned URL and updates the attachment record in database
-    """
-    try:
-        # Get attachment from database
-        attachment = db.query(InflowEntryAttachment).filter(
-            InflowEntryAttachment.id == attachment_id
-        ).first()
+#     Returns a new presigned URL and updates the attachment record in database
+#     """
+#     try:
+#         # Get attachment from database
+#         attachment = db.query(InflowEntryAttachment).filter(
+#             InflowEntryAttachment.id == attachment_id
+#         ).first()
         
-        if not attachment:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Attachment with id {attachment_id} not found"
-            )
+#         if not attachment:
+#             raise HTTPException(
+#                 status_code=status.HTTP_404_NOT_FOUND,
+#                 detail=f"Attachment with id {attachment_id} not found"
+#             )
         
-        if not attachment.file_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Attachment has no file URL"
-            )
+#         if not attachment.file_url:
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST,
+#                 detail="Attachment has no file URL"
+#             )
         
-        print(f"🔄 Regenerating presigned URL for attachment {attachment_id}: {attachment.file_url[:100]}...")
+#         print(f"🔄 Regenerating presigned URL for attachment {attachment_id}: {attachment.file_url[:100]}...")
         
-        # Regenerate presigned URL
-        new_presigned_url = regenerate_presigned_url(attachment.file_url)
+#         # Regenerate presigned URL
+#         new_presigned_url = regenerate_presigned_url(attachment.file_url)
         
-        if not new_presigned_url:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate presigned URL. Check if the file exists in Railway Storage."
-            )
+#         if not new_presigned_url:
+#             raise HTTPException(
+#                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#                 detail="Failed to generate presigned URL. Check if the file exists in Railway Storage."
+#             )
         
-        # Update attachment with new URL
-        attachment.file_url = new_presigned_url
-        db.commit()
-        db.refresh(attachment)
+#         # Update attachment with new URL
+#         attachment.file_url = new_presigned_url
+#         db.commit()
+#         db.refresh(attachment)
         
-        return {
-            "success": True,
-            "message": f"Presigned URL regenerated and updated for attachment {attachment_id} (valid for 1 week)",
-            "file_url": new_presigned_url,
-            "expires_in_seconds": 604800  # 1 week
-        }
+#         return {
+#             "success": True,
+#             "message": f"Presigned URL regenerated and updated for attachment {attachment_id} (valid for 1 week)",
+#             "file_url": new_presigned_url,
+#             "expires_in_seconds": 604800  # 1 week
+#         }
         
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error regenerating attachment URL: {str(e)}"
-        )
+#     except HTTPException:
+#         db.rollback()
+#         raise
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error regenerating attachment URL: {str(e)}"
+#         )
 
 
 # List Inflow Entries with Filters
 
-@app.get("/api/inflow-entries", status_code=status.HTTP_200_OK)
+@app.get("/api/flow-entries", status_code=status.HTTP_200_OK)
 async def list_inflow_entries(
     company_id: Optional[int] = None,
     inflow_form_id: Optional[int] = None,
@@ -1774,91 +1774,91 @@ async def list_inflow_entries(
 
 # Alternative endpoint with JSON response including metadata
 
-@app.get("/api/inflow-entries-with-meta")
-async def list_inflow_entries_with_meta(
-    company_id: Optional[int] = None,
-    inflow_form_id: Optional[int] = None,
-    mode: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
-):
-    """
-    List inflow entries with metadata (total count, pagination info)
+# @app.get("/api/inflow-entries-with-meta")
+# async def list_inflow_entries_with_meta(
+#     company_id: Optional[int] = None,
+#     inflow_form_id: Optional[int] = None,
+#     mode: Optional[str] = None,
+#     skip: int = 0,
+#     limit: int = 100,
+#     db: Session = Depends(get_db)
+# ):
+#     """
+#     List inflow entries with metadata (total count, pagination info)
     
-    Same filters as /api/inflow-entries but includes pagination metadata
-    """
-    try:
-        # Start with base query
-        query = db.query(InflowEntryPayload)
+#     Same filters as /api/inflow-entries but includes pagination metadata
+#     """
+#     try:
+#         # Start with base query
+#         query = db.query(InflowEntryPayload)
         
-        # Apply filters
-        if company_id is not None:
-            query = query.filter(InflowEntryPayload.company_id == company_id)
+#         # Apply filters
+#         if company_id is not None:
+#             query = query.filter(InflowEntryPayload.company_id == company_id)
         
-        if inflow_form_id is not None:
-            query = query.filter(InflowEntryPayload.inflow_form_id == inflow_form_id)
+#         if inflow_form_id is not None:
+#             query = query.filter(InflowEntryPayload.inflow_form_id == inflow_form_id)
         
-        # Filter by mode in payload (JSON field)
-        if mode:
-            try:
-                # Method 1: Direct JSON key access (works with SQLAlchemy JSON type)
-                query = query.filter(
-                    InflowEntryPayload.payload['mode'].astext == mode
-                )
-            except:
-                # Method 2: Use JSON_EXTRACT for MySQL (fallback)
-                from sqlalchemy import text
-                query = query.filter(
-                    text(f"JSON_EXTRACT(payload, '$.mode') = :mode")
-                ).params(mode=mode)
+#         # Filter by mode in payload (JSON field)
+#         if mode:
+#             try:
+#                 # Method 1: Direct JSON key access (works with SQLAlchemy JSON type)
+#                 query = query.filter(
+#                     InflowEntryPayload.payload['mode'].astext == mode
+#                 )
+#             except:
+#                 # Method 2: Use JSON_EXTRACT for MySQL (fallback)
+#                 from sqlalchemy import text
+#                 query = query.filter(
+#                     text(f"JSON_EXTRACT(payload, '$.mode') = :mode")
+#                 ).params(mode=mode)
         
-        # Get total count
-        total_count = query.count()
+#         # Get total count
+#         total_count = query.count()
         
-        # Apply pagination and ordering
-        entries = query.order_by(InflowEntryPayload.created_at.desc()).offset(skip).limit(limit).all()
+#         # Apply pagination and ordering
+#         entries = query.order_by(InflowEntryPayload.created_at.desc()).offset(skip).limit(limit).all()
         
-        # Get attachments for each entry
-        entries_list = []
-        for entry in entries:
-            attachments = db.query(InflowEntryAttachment).filter(
-                InflowEntryAttachment.inflow_entry_id == entry.id
-            ).all()
+#         # Get attachments for each entry
+#         entries_list = []
+#         for entry in entries:
+#             attachments = db.query(InflowEntryAttachment).filter(
+#                 InflowEntryAttachment.inflow_entry_id == entry.id
+#             ).all()
             
-            payload = entry.payload or {}
-            entries_list.append({
-                "id": entry.id,
-                "company_id": entry.company_id,
-                "inflow_form_id": entry.inflow_form_id,
-                "bank_name": entry.bank_name or payload.get("bank_name"),
-                "bank_account_number": entry.bank_account_number or payload.get("bank_account_number"),
-                "payload": entry.payload,
-                "created_at": entry.created_at,
-                "attachments": [
-                    {
-                        "id": att.id,
-                        "inflow_entry_id": att.inflow_entry_id,
-                        "file_url": att.file_url,
-                        "created_at": att.created_at
-                    }
-                    for att in attachments
-                ]
-            })
+#             payload = entry.payload or {}
+#             entries_list.append({
+#                 "id": entry.id,
+#                 "company_id": entry.company_id,
+#                 "inflow_form_id": entry.inflow_form_id,
+#                 "bank_name": entry.bank_name or payload.get("bank_name"),
+#                 "bank_account_number": entry.bank_account_number or payload.get("bank_account_number"),
+#                 "payload": entry.payload,
+#                 "created_at": entry.created_at,
+#                 "attachments": [
+#                     {
+#                         "id": att.id,
+#                         "inflow_entry_id": att.inflow_entry_id,
+#                         "file_url": att.file_url,
+#                         "created_at": att.created_at
+#                     }
+#                     for att in attachments
+#                 ]
+#             })
         
-        return {
-            "success": True,
-            "total": total_count,
-            "skip": skip,
-            "limit": limit,
-            "data": entries_list
-        }
+#         return {
+#             "success": True,
+#             "total": total_count,
+#             "skip": skip,
+#             "limit": limit,
+#             "data": entries_list
+#         }
         
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error fetching inflow entries: {str(e)}"
-        )
+#     except Exception as e:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail=f"Error fetching inflow entries: {str(e)}"
+#         )
 
 
 if __name__ == "__main__":
