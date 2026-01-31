@@ -1128,17 +1128,20 @@ async def add_transaction(
     - **company_id**: ID of the company (required, form field)
     - **inflow_form_id**: ID of the inflow form (required, form field)
     - **payload**: JSON string containing the form data (required, form field)
+    - **bank_name**: Bank name (optional, form field – outside payload)
+    - **bank_account_number**: Bank account number (optional, form field – outside payload)
     - **files**: Optional list of files to upload as attachments (can upload multiple files from device)
     
     Returns the created entry with all attachments
     
-    Example usage with curl:
+    Example usage with curl (bank_name and bank_account_number as separate form fields):
     curl -X POST "http://localhost:8000/api/add-transaction" \\
       -F "company_id=1" \\
       -F "inflow_form_id=1" \\
       -F "payload={\\"amount\\": 1000}" \\
-      -F "files=@/path/to/file1.pdf" \\
-      -F "files=@/path/to/file2.jpg"
+      -F "bank_name=HDFC Bank" \\
+      -F "bank_account_number=1234567890" \\
+      -F "files=@/path/to/file1.pdf"
     """
     try:
         # Parse all form data manually to avoid FastAPI validation issues with files
@@ -1281,6 +1284,14 @@ async def add_transaction(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Payload must be a JSON object/dict, got {type(payload_dict).__name__}. Example: {{\"key\": \"value\"}}"
             )
+        
+        # bank_name and bank_account_number from form (outside payload) override or supplement payload
+        bank_name = form_data.get("bank_name")
+        bank_account_number = form_data.get("bank_account_number")
+        if bank_name is not None and str(bank_name).strip():
+            payload_dict["bank_name"] = str(bank_name).strip()
+        if bank_account_number is not None and str(bank_account_number).strip():
+            payload_dict["bank_account_number"] = str(bank_account_number).strip()
         
         # Create inflow entry payload
         db_entry = InflowEntryPayload(
@@ -1439,12 +1450,14 @@ async def add_transaction(
         )
 
 
-@app.post("/api/edit-transaction", response_model=InflowEntryCreateResponse, status_code=status.HTTP_200_OK)
+@app.put("/api/edit-transaction", response_model=InflowEntryCreateResponse, status_code=status.HTTP_200_OK)
 def edit_transaction(body: InflowEntryEdit, db: Session = Depends(get_db)):
     """
-    Update an existing inflow entry (transaction) by id.
+    Update an existing inflow entry (transaction) by id (PUT method).
     - **id**: Inflow entry ID (required)
-    - **payload**: Updated payload dict (optional). If provided, merged with existing payload; bank_name and bank_account_number are synced to columns.
+    - **payload**: Updated payload dict (optional). If provided, merged with existing payload.
+    - **bank_name**: Bank name (optional, outside payload)
+    - **bank_account_number**: Bank account number (optional, outside payload)
     """
     try:
         entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == body.id).first()
@@ -1453,14 +1466,17 @@ def edit_transaction(body: InflowEntryEdit, db: Session = Depends(get_db)):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Inflow entry with id {body.id} not found"
             )
+        current = entry.payload or {}
         if body.payload is not None:
-            current = entry.payload or {}
-            merged = {**current, **body.payload}
-            entry.payload = merged
-            if "bank_name" in body.payload:
-                entry.bank_name = body.payload.get("bank_name")
-            if "bank_account_number" in body.payload:
-                entry.bank_account_number = body.payload.get("bank_account_number")
+            current = {**current, **body.payload}
+        # bank_name and bank_account_number outside payload (same as add-transaction)
+        if body.bank_name is not None:
+            current["bank_name"] = body.bank_name
+        if body.bank_account_number is not None:
+            current["bank_account_number"] = body.bank_account_number
+        entry.payload = current
+        entry.bank_name = body.bank_name if body.bank_name is not None else current.get("bank_name")
+        entry.bank_account_number = body.bank_account_number if body.bank_account_number is not None else current.get("bank_account_number")
         db.commit()
         db.refresh(entry)
         attachments = db.query(InflowEntryAttachment).filter(
