@@ -440,3 +440,14 @@ class InflowEntryCreateResponse(BaseModel):
     success: bool
     message: str
     entry: InflowEntryPayloadResponse
+
+
+class InflowEntryEdit(BaseModel):
+    """Schema for editing an inflow entry (transaction)"""
+    id: int = Field(..., description="Inflow entry ID to edit")
+    payload: Optional[dict] = Field(None, description="Updated payload (partial merge supported)")
+
+
+class InflowEntryDelete(BaseModel):
+    """Schema for deleting an inflow entry (transaction)"""
+    id: int = Field(..., description="Inflow entry ID to delete")
