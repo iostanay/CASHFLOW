@@ -1128,17 +1128,19 @@ async def add_transaction(
     - **company_id**: ID of the company (required, form field)
     - **inflow_form_id**: ID of the inflow form (required, form field)
     - **payload**: JSON string containing the form data (required, form field)
+    - **mode**: Mode (optional, form field – outside payload)
     - **bank_name**: Bank name (optional, form field – outside payload)
     - **bank_account_number**: Bank account number (optional, form field – outside payload)
     - **files**: Optional list of files to upload as attachments (can upload multiple files from device)
     
     Returns the created entry with all attachments
     
-    Example usage with curl (bank_name and bank_account_number as separate form fields):
+    Example usage with curl (mode, bank_name and bank_account_number as separate form fields):
     curl -X POST "http://localhost:8000/api/add-transaction" \\
       -F "company_id=1" \\
       -F "inflow_form_id=1" \\
       -F "payload={\\"amount\\": 1000}" \\
+      -F "mode=BANK" \\
       -F "bank_name=HDFC Bank" \\
       -F "bank_account_number=1234567890" \\
       -F "files=@/path/to/file1.pdf"
@@ -1285,9 +1287,12 @@ async def add_transaction(
                 detail=f"Payload must be a JSON object/dict, got {type(payload_dict).__name__}. Example: {{\"key\": \"value\"}}"
             )
         
-        # bank_name and bank_account_number from form (outside payload) override or supplement payload
+        # mode, bank_name and bank_account_number from form (outside payload) override or supplement payload
+        mode = form_data.get("mode")
         bank_name = form_data.get("bank_name")
         bank_account_number = form_data.get("bank_account_number")
+        if mode is not None and str(mode).strip():
+            payload_dict["mode"] = str(mode).strip()
         if bank_name is not None and str(bank_name).strip():
             payload_dict["bank_name"] = str(bank_name).strip()
         if bank_account_number is not None and str(bank_account_number).strip():
@@ -1456,6 +1461,7 @@ def edit_transaction(body: InflowEntryEdit, db: Session = Depends(get_db)):
     Update an existing inflow entry (transaction) by id (PUT method).
     - **id**: Inflow entry ID (required)
     - **payload**: Updated payload dict (optional). If provided, merged with existing payload.
+    - **mode**: Mode (optional, outside payload)
     - **bank_name**: Bank name (optional, outside payload)
     - **bank_account_number**: Bank account number (optional, outside payload)
     """
@@ -1469,7 +1475,9 @@ def edit_transaction(body: InflowEntryEdit, db: Session = Depends(get_db)):
         current = entry.payload or {}
         if body.payload is not None:
             current = {**current, **body.payload}
-        # bank_name and bank_account_number outside payload (same as add-transaction)
+        # mode, bank_name and bank_account_number outside payload (same as add-transaction)
+        if body.mode is not None:
+            current["mode"] = body.mode
         if body.bank_name is not None:
             current["bank_name"] = body.bank_name
         if body.bank_account_number is not None:

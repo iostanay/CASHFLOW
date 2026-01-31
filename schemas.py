@@ -446,6 +446,7 @@ class InflowEntryEdit(BaseModel):
     """Schema for editing an inflow entry (transaction)"""
     id: int = Field(..., description="Inflow entry ID to edit")
     payload: Optional[dict] = Field(None, description="Updated payload (partial merge supported)")
+    mode: Optional[str] = Field(None, description="Mode (outside payload)")
     bank_name: Optional[str] = Field(None, description="Bank name (outside payload)")
     bank_account_number: Optional[str] = Field(None, description="Bank account number (outside payload)")
 
