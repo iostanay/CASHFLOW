@@ -1303,6 +1303,7 @@ async def add_transaction(
             company_id=company_id,
             inflow_form_id=inflow_form_id,
             payload=payload_dict,
+            mode=payload_dict.get("mode"),
             bank_name=payload_dict.get("bank_name"),
             bank_account_number=payload_dict.get("bank_account_number"),
         )
@@ -1483,6 +1484,7 @@ def edit_transaction(body: InflowEntryEdit, db: Session = Depends(get_db)):
         if body.bank_account_number is not None:
             current["bank_account_number"] = body.bank_account_number
         entry.payload = current
+        entry.mode = body.mode if body.mode is not None else current.get("mode")
         entry.bank_name = body.bank_name if body.bank_name is not None else current.get("bank_name")
         entry.bank_account_number = body.bank_account_number if body.bank_account_number is not None else current.get("bank_account_number")
         db.commit()
@@ -1847,6 +1849,7 @@ async def list_inflow_entries(
                 "id": entry.id,
                 "company_id": entry.company_id,
                 "inflow_form_id": entry.inflow_form_id,
+                "mode": entry.mode or payload.get("mode"),
                 "bank_name": entry.bank_name or payload.get("bank_name"),
                 "bank_account_number": entry.bank_account_number or payload.get("bank_account_number"),
                 "payload": entry.payload,
