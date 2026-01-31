@@ -1457,38 +1457,158 @@ async def add_transaction(
 
 
 @app.put("/api/edit-transaction", response_model=InflowEntryCreateResponse, status_code=status.HTTP_200_OK)
-def edit_transaction(body: InflowEntryEdit, db: Session = Depends(get_db)):
+async def edit_transaction(request: Request, db: Session = Depends(get_db)):
     """
     Update an existing inflow entry (transaction) by id (PUT method).
-    - **id**: Inflow entry ID (required)
-    - **payload**: Updated payload dict (optional). If provided, merged with existing payload.
-    - **mode**: Mode (optional, outside payload)
-    - **bank_name**: Bank name (optional, outside payload)
-    - **bank_account_number**: Bank account number (optional, outside payload)
+
+    Accepts either:
+    - **JSON body** (Content-Type: application/json): id, payload, mode, bank_name, bank_account_number.
+    - **Form-data** (Content-Type: multipart/form-data): id (required), payload (optional JSON string),
+      mode, bank_name, bank_account_number, and optional **files** to upload as new attachments.
+
+    Form-data example with file upload:
+    curl -X PUT "http://localhost:8000/api/edit-transaction" \\
+      -F "id=123" \\
+      -F "payload={\\"amount\\": 2000}" \\
+      -F "mode=BANK" \\
+      -F "files=@/path/to/receipt.pdf"
     """
     try:
-        entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == body.id).first()
-        if not entry:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Inflow entry with id {body.id} not found"
-            )
-        current = entry.payload or {}
-        if body.payload is not None:
-            current = {**current, **body.payload}
-        # mode, bank_name and bank_account_number outside payload (same as add-transaction)
-        if body.mode is not None:
-            current["mode"] = body.mode
-        if body.bank_name is not None:
-            current["bank_name"] = body.bank_name
-        if body.bank_account_number is not None:
-            current["bank_account_number"] = body.bank_account_number
-        entry.payload = current
-        entry.mode = body.mode if body.mode is not None else current.get("mode")
-        entry.bank_name = body.bank_name if body.bank_name is not None else current.get("bank_name")
-        entry.bank_account_number = body.bank_account_number if body.bank_account_number is not None else current.get("bank_account_number")
-        db.commit()
-        db.refresh(entry)
+        content_type = request.headers.get("content-type", "")
+
+        if "multipart/form-data" in content_type:
+            # Form-data: parse form fields and optional file uploads
+            form_data = await request.form()
+
+            try:
+                entry_id = int(form_data.get("id"))
+            except (ValueError, TypeError):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="id is required and must be a valid integer"
+                )
+
+            entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == entry_id).first()
+            if not entry:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Inflow entry with id {entry_id} not found"
+                )
+
+            current = entry.payload or {}
+            payload_raw = form_data.get("payload")
+            if payload_raw is not None and str(payload_raw).strip():
+                try:
+                    payload_dict = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+                    if isinstance(payload_dict, dict):
+                        current = {**current, **payload_dict}
+                except json.JSONDecodeError:
+                    pass
+            mode = form_data.get("mode")
+            bank_name = form_data.get("bank_name")
+            bank_account_number = form_data.get("bank_account_number")
+            if mode is not None and str(mode).strip():
+                current["mode"] = str(mode).strip()
+            if bank_name is not None and str(bank_name).strip():
+                current["bank_name"] = str(bank_name).strip()
+            if bank_account_number is not None and str(bank_account_number).strip():
+                current["bank_account_number"] = str(bank_account_number).strip()
+
+            entry.payload = current
+            entry.mode = current.get("mode")
+            entry.bank_name = current.get("bank_name")
+            entry.bank_account_number = current.get("bank_account_number")
+            db.flush()
+
+            # Parse files from form (same as add-transaction)
+            files_list = []
+            if "files" in form_data:
+                for file_item in form_data.getlist("files"):
+                    if isinstance(file_item, UploadFile):
+                        fn = getattr(file_item, "filename", None) or getattr(file_item, "name", None)
+                        if fn and str(fn).strip() and fn != "undefined":
+                            files_list.append(file_item)
+            for key in form_data.keys():
+                if "file" in key.lower():
+                    value = form_data.get(key)
+                    if isinstance(value, UploadFile) and value not in files_list and getattr(value, "filename", None):
+                        files_list.append(value)
+
+            file_urls_from_form = []
+            file_upload_raw = form_data.get("file_upload")
+            if file_upload_raw:
+                try:
+                    urls = json.loads(file_upload_raw) if isinstance(file_upload_raw, str) else file_upload_raw
+                    if isinstance(urls, list):
+                        file_urls_from_form = [u for u in urls if isinstance(u, str) and u.strip()]
+                    elif isinstance(urls, str) and urls.strip():
+                        file_urls_from_form = [urls.strip()]
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            folder = f"inflow/{entry.company_id}/{entry.inflow_form_id}"
+            uploaded_count = 0
+            failed_files = []
+
+            for file in files_list:
+                if hasattr(file, "filename") and file.filename and file.filename.strip():
+                    try:
+                        file_content = await file.read()
+                        if file_content:
+                            file_url = upload_file_to_railway(
+                                file_content=file_content,
+                                file_name=file.filename,
+                                folder=folder,
+                            )
+                            if file_url:
+                                db.add(InflowEntryAttachment(inflow_entry_id=entry.id, file_url=file_url))
+                                uploaded_count += 1
+                            else:
+                                failed_files.append(file.filename)
+                    except Exception:
+                        failed_files.append(getattr(file, "filename", "?"))
+
+            for file_url in file_urls_from_form:
+                try:
+                    db.add(InflowEntryAttachment(inflow_entry_id=entry.id, file_url=file_url))
+                    uploaded_count += 1
+                except Exception:
+                    failed_files.append(file_url)
+
+            db.commit()
+            db.refresh(entry)
+            message = "Transaction updated successfully"
+            if uploaded_count > 0:
+                message += f" with {uploaded_count} file(s) uploaded"
+            if failed_files:
+                message += f". {len(failed_files)} file(s) failed: {', '.join(failed_files[:5])}"
+        else:
+            # JSON body
+            body = await request.json()
+            body = InflowEntryEdit(**body)
+            entry = db.query(InflowEntryPayload).filter(InflowEntryPayload.id == body.id).first()
+            if not entry:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Inflow entry with id {body.id} not found"
+                )
+            current = entry.payload or {}
+            if body.payload is not None:
+                current = {**current, **body.payload}
+            if body.mode is not None:
+                current["mode"] = body.mode
+            if body.bank_name is not None:
+                current["bank_name"] = body.bank_name
+            if body.bank_account_number is not None:
+                current["bank_account_number"] = body.bank_account_number
+            entry.payload = current
+            entry.mode = body.mode if body.mode is not None else current.get("mode")
+            entry.bank_name = body.bank_name if body.bank_name is not None else current.get("bank_name")
+            entry.bank_account_number = body.bank_account_number if body.bank_account_number is not None else current.get("bank_account_number")
+            db.commit()
+            db.refresh(entry)
+            message = "Transaction updated successfully"
+
         attachments = db.query(InflowEntryAttachment).filter(
             InflowEntryAttachment.inflow_entry_id == entry.id
         ).all()
@@ -1498,7 +1618,7 @@ def edit_transaction(body: InflowEntryEdit, db: Session = Depends(get_db)):
         ]
         return {
             "success": True,
-            "message": "Transaction updated successfully",
+            "message": message,
             "entry": {
                 "id": entry.id,
                 "company_id": entry.company_id,
