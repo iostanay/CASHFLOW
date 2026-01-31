@@ -1639,7 +1639,7 @@ async def edit_transaction(request: Request, db: Session = Depends(get_db)):
         )
 
 
-@app.post("/api/delete-transaction", status_code=status.HTTP_200_OK)
+@app.delete("/api/delete-transaction", status_code=status.HTTP_200_OK)
 def delete_transaction(body: InflowEntryDelete, db: Session = Depends(get_db)):
     """
     Delete an inflow entry (transaction) by id. Attachments are deleted by cascade.
