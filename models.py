@@ -253,6 +253,8 @@ class InflowEntryPayload(Base):
     company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     inflow_form_id = Column(BigInteger, ForeignKey("inflow_forms.id", ondelete="CASCADE"), nullable=False)
     payload = Column(JSON, nullable=False)
+    bank_name = Column(String(150), nullable=True)
+    bank_account_number = Column(String(150), nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
 
     # Relationships

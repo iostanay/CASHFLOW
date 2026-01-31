@@ -840,19 +840,24 @@ def list_inflow_forms(
 @app.get("/api/inflow-forms/sources", response_model=List[InflowFormSourceResponse])
 def list_inflow_form_sources(
     flow_type: str,
-    mode: str,
+    mode: Optional[str] = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
 ):
     """
-    Get id and source from inflow_forms filtered by flow_type and mode.
-    Equivalent to: SELECT id, source FROM inflow_forms WHERE flow_type = ? AND mode = ?
+    Get id and source from inflow_forms filtered by flow_type and optionally by mode.
+    Equivalent to: SELECT id, source FROM inflow_forms WHERE flow_type = ? [AND mode = ?]
     """
     try:
-        rows = (
+        query = (
             db.query(InflowForm.id, InflowForm.source)
-            .filter(InflowForm.flow_type == flow_type, InflowForm.mode == mode)
+            .filter(InflowForm.flow_type == flow_type)
+        )
+        if mode is not None:
+            query = query.filter(InflowForm.mode == mode)
+        rows = (
+            query
             .order_by(InflowForm.updated_at.desc())
             .offset(skip)
             .limit(limit)
@@ -1280,7 +1285,9 @@ async def add_transaction(
         db_entry = InflowEntryPayload(
             company_id=company_id,
             inflow_form_id=inflow_form_id,
-            payload=payload_dict
+            payload=payload_dict,
+            bank_name=payload_dict.get("bank_name"),
+            bank_account_number=payload_dict.get("bank_account_number"),
         )
         db.add(db_entry)
         db.flush()  # Flush to get the entry ID without committing
@@ -1481,10 +1488,13 @@ async def add_transaction_json(
             )
         
         # Create inflow entry payload
+        payload_dict = transaction_data.payload if isinstance(transaction_data.payload, dict) else {}
         db_entry = InflowEntryPayload(
             company_id=transaction_data.company_id,
             inflow_form_id=transaction_data.inflow_form_id,
-            payload=transaction_data.payload
+            payload=transaction_data.payload,
+            bank_name=payload_dict.get("bank_name"),
+            bank_account_number=payload_dict.get("bank_account_number"),
         )
         db.add(db_entry)
         db.flush()  # Flush to get the entry ID without committing
@@ -1731,8 +1741,8 @@ async def list_inflow_entries(
                 "id": entry.id,
                 "company_id": entry.company_id,
                 "inflow_form_id": entry.inflow_form_id,
-                "bank_name": payload.get("bank_name"),
-                "bank_account_number": payload.get("bank_account_number"),
+                "bank_name": entry.bank_name or payload.get("bank_name"),
+                "bank_account_number": entry.bank_account_number or payload.get("bank_account_number"),
                 "payload": entry.payload,
                 "created_at": entry.created_at,
                 "attachments": [
@@ -1821,8 +1831,8 @@ async def list_inflow_entries_with_meta(
                 "id": entry.id,
                 "company_id": entry.company_id,
                 "inflow_form_id": entry.inflow_form_id,
-                "bank_name": payload.get("bank_name"),
-                "bank_account_number": payload.get("bank_account_number"),
+                "bank_name": entry.bank_name or payload.get("bank_name"),
+                "bank_account_number": entry.bank_account_number or payload.get("bank_account_number"),
                 "payload": entry.payload,
                 "created_at": entry.created_at,
                 "attachments": [
