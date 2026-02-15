@@ -1,7 +1,10 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import date, datetime
-from models import ReceiptType, ReceiptMode, PaymentPurpose, PaymentType, EmployeePaymentPurpose
+from models import (
+    ReceiptType, ReceiptMode, PaymentPurpose, PaymentType, EmployeePaymentPurpose,
+    FlowTypeEnum, InflowModeEnum, FieldTypeEnum,
+)
 
 
 class CustomerReceiptCreate(BaseModel):
@@ -32,6 +35,7 @@ class CustomerReceiptResponse(BaseModel):
     project_name: Optional[str]
     company_name: Optional[str]
     remarks: Optional[str]
+    attachment_path: Optional[str]
     created_at: datetime
     updated_at: datetime
 
@@ -248,3 +252,205 @@ class CompanyListResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Inflow Forms ---
+
+class CustomFieldCreate(BaseModel):
+    """Schema for custom field in the request (uses 'type' and 'required')"""
+    field_key: str = Field(..., max_length=100, description="Field key")
+    label: str = Field(..., max_length=150, description="Display label")
+    type: FieldTypeEnum = Field(..., description="TEXT, NUMBER, DATE, SPINNER, TEXTAREA")
+    required: bool = Field(default=False, description="Whether field is required")
+    options: Optional[Any] = Field(None, description="JSON options for SPINNER/dropdown")
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormCreateWithFields(BaseModel):
+    """Create inflow form with fields in one request"""
+    flow_type: FlowTypeEnum = Field(..., description="INFLOW or OUTFLOW")
+    mode: InflowModeEnum = Field(..., description="BANK, CASH, or UPI")
+    source: str = Field(..., max_length=150, description="Source")
+    attachment: int = Field(
+        default=0,
+        ge=0,
+        le=1,
+        description="0 = no attachment, 1 = attachment enabled"
+    )
+    custom_fields: List[CustomFieldCreate] = Field(default=[], description="List of custom fields")
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormCreate(BaseModel):
+    """Create inflow form without fields"""
+    flow_type: FlowTypeEnum = Field(..., description="INFLOW or OUTFLOW")
+    mode: InflowModeEnum = Field(..., description="BANK, CASH, or UPI")
+    source: str = Field(..., max_length=150, description="Source")
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormUpdate(BaseModel):
+    flow_type: Optional[FlowTypeEnum] = None
+    mode: Optional[InflowModeEnum] = None
+    source: Optional[str] = Field(None, max_length=150)
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormResponse(BaseModel):
+    id: int
+    flow_type: str
+    mode: str
+    source: str
+    attachment: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InflowFormSourceResponse(BaseModel):
+    """Response with id and source (SELECT id, source FROM inflow_forms WHERE ...)"""
+    id: int
+    source: str
+
+
+# --- Inflow Form Fields ---
+
+class InflowFormFieldCreate(BaseModel):
+    inflow_form_id: int = Field(..., description="Parent inflow form ID")
+    field_key: str = Field(..., max_length=100, description="Field key")
+    label: str = Field(..., max_length=150, description="Display label")
+    field_type: FieldTypeEnum = Field(..., description="TEXT, NUMBER, DATE, SPINNER, TEXTAREA")
+    is_required: bool = Field(default=False, description="Whether field is required")
+    options: Optional[Any] = Field(None, description="JSON options for SPINNER/dropdown")
+    sort_order: int = Field(default=0, description="Sort order")
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormFieldUpdate(BaseModel):
+    field_key: Optional[str] = Field(None, max_length=100)
+    label: Optional[str] = Field(None, max_length=150)
+    field_type: Optional[FieldTypeEnum] = None
+    is_required: Optional[bool] = None
+    options: Optional[Any] = None
+    sort_order: Optional[int] = None
+
+    class Config:
+        use_enum_values = True
+
+
+class InflowFormFieldResponse(BaseModel):
+    id: int
+    inflow_form_id: int
+    field_key: str
+    label: str
+    field_type: str
+    is_required: bool
+    options: Optional[Any]
+    sort_order: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CustomFieldResponse(BaseModel):
+    """Response format matching the request format (uses 'type' and 'required')"""
+    field_key: str
+    label: str
+    type: str
+    required: bool
+    options: Optional[Any] = None
+
+
+class InflowFormWithFieldsResponse(InflowFormResponse):
+    """Inflow form with nested fields (for GET by id)"""
+    custom_fields: List[CustomFieldResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class FileUploadResponse(BaseModel):
+    """Response model for file upload"""
+    success: bool
+    message: str
+    file_url: Optional[str] = None
+    file_name: Optional[str] = None
+
+
+class PresignedUrlResponse(BaseModel):
+    """Response model for presigned URL regeneration"""
+    success: bool
+    message: str
+    file_url: Optional[str] = None
+    expires_in_seconds: int = 604800  # 1 week
+
+
+# --- Inflow Entry Schemas ---
+
+class InflowEntryAttachmentResponse(BaseModel):
+    """Response model for inflow entry attachment"""
+    id: int
+    inflow_entry_id: int
+    file_url: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class InflowEntryPayloadCreate(BaseModel):
+    """Schema for creating inflow entry payload"""
+    company_id: int = Field(..., description="Company ID")
+    inflow_form_id: int = Field(..., description="Inflow form ID")
+    payload: dict = Field(..., description="JSON payload with form data")
+    files: Optional[List[str]] = Field(default=None, description="Optional list of file URLs (already uploaded to Railway Storage)")
+
+    class Config:
+        from_attributes = True
+
+
+class InflowEntryPayloadResponse(BaseModel):
+    """Response model for inflow entry payload"""
+    id: int
+    company_id: int
+    inflow_form_id: int
+    payload: dict
+    created_at: datetime
+    attachments: List[InflowEntryAttachmentResponse] = []
+
+    class Config:
+        from_attributes = True
+
+
+class InflowEntryCreateResponse(BaseModel):
+    """Response model for creating inflow entry with attachments"""
+    success: bool
+    message: str
+    entry: InflowEntryPayloadResponse
+
+
+class InflowEntryEdit(BaseModel):
+    """Schema for editing an inflow entry (transaction)"""
+    id: int = Field(..., description="Inflow entry ID to edit")
+    payload: Optional[dict] = Field(None, description="Updated payload (partial merge supported)")
+    mode: Optional[str] = Field(None, description="Mode (outside payload)")
+    bank_name: Optional[str] = Field(None, description="Bank name (outside payload)")
+    bank_account_number: Optional[str] = Field(None, description="Bank account number (outside payload)")
+
+
+class InflowEntryDelete(BaseModel):
+    """Schema for deleting an inflow entry (transaction)"""
+    id: int = Field(..., description="Inflow entry ID to delete")
