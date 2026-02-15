@@ -1,10 +1,6 @@
-<<<<<<< HEAD
-from sqlalchemy import Column, BigInteger, String, Date, Enum, DECIMAL, Text, TIMESTAMP
-=======
 from sqlalchemy import Column, BigInteger, Integer, String, Date, Enum, DECIMAL, Text, TIMESTAMP, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.dialects.mysql import JSON
 from sqlalchemy.orm import relationship
->>>>>>> development
 from sqlalchemy.sql import func
 from database import Base
 import enum
@@ -18,6 +14,42 @@ class ReceiptType(str, enum.Enum):
     CARD = "Card"
 
 
+class ReceiptMode(str, enum.Enum):
+    CASH = "Cash"
+    CHEQUE = "Cheque"
+    BANK_TRANSFER = "Bank Transfer"
+    NEFT = "NEFT"
+    RTGS = "RTGS"
+    IMPS = "IMPS"
+
+
+class PaymentPurpose(str, enum.Enum):
+    PURCHASE_MATERIAL = "Purchase of Material"
+    PURCHASE_ASSETS = "Purchase of Assets"
+    SERVICE_ADVISEMENT = "Service Advisement"
+    MAINTENANCE = "MAINTENANCE"
+    OTHER = "Other"
+
+
+class PaymentType(str, enum.Enum):
+    CASH = "Cash"
+    CHEQUE = "Cheque"
+    BANK_TRANSFER = "Bank Transfer"
+    UPI = "UPI"
+    NEFT = "NEFT"
+    RTGS = "RTGS"
+    IMPS = "IMPS"
+
+
+class EmployeePaymentPurpose(str, enum.Enum):
+    SALARY_PAYMENT = "Salary Payment"
+    EXPENSES_REIMBURSEMENT = "Expenses Reimbursement"
+    INCENTIVE_PAYMENT = "Incentive Payment"
+    COMMISSION_PAYMENT = "Commission Payment"
+    BONUS = "Bonus"
+    OTHER = "Other"
+
+
 class CustomerReceipt(Base):
     __tablename__ = "customer_receipts"
 
@@ -28,7 +60,7 @@ class CustomerReceipt(Base):
     receipt_purpose = Column(String(100), default="Receipt from Customer")
     
     receipt_date = Column(Date, nullable=False)
-    receipt_type = Column(Enum(ReceiptType), nullable=False)
+    receipt_type = Column(String(50), default="Cash Inflow")
     
     amount = Column(DECIMAL(12, 2), nullable=False)
     
@@ -40,8 +72,6 @@ class CustomerReceipt(Base):
     
     created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
-<<<<<<< HEAD
-=======
 
 
 class InflowReceiptMaster(Base):
@@ -244,4 +274,5 @@ class InflowEntryAttachment(Base):
 
     # Relationship
     inflow_entry = relationship("InflowEntryPayload", back_populates="attachments")
->>>>>>> development
+
+
