@@ -274,3 +274,15 @@ class InflowEntryAttachment(Base):
 
     # Relationship
     inflow_entry = relationship("InflowEntryPayload", back_populates="attachments")
+
+
+class InflowEntryAttachment1(Base):
+    __tablename__ = "inflow_entry_attachments"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    inflow_entry_id = Column(BigInteger, ForeignKey("inflow_entry_payloads.id", ondelete="CASCADE"), nullable=False)
+    file_url = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+
+    # Relationship
+    inflow_entry = relationship("InflowEntryPayload", back_populates="attachments")
